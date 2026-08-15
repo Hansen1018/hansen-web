@@ -174,34 +174,6 @@ Breakdown of the 87.2 kB shared baseline:
 
 Page-specific additions: hero typewriter (`HeroSection`) + scroll-spy (`useActiveSection`) + mobile drawer (`MobileMenu`) + blog fetch (`BlogSection`) add ~7.8 kB on top of the shared baseline. Static sections (About, Skills, Timeline, SideHustle, Contact) add 0 kB.
 
-## Migration from Vue 3
-
-Original Vue 3 + Vite + vite-ssg source backed up at `hansen-web-vue-bak/` during the cutover and deleted post-deploy. Available in commit history.
-
-| | Vue 3 + vite-ssg | Next.js 14 App Router |
-|---|---|---|
-| Bundle (gz) | ~33 kB | ~95 kB First Load JS |
-| Build | `vite-ssg` | `next build` |
-| SSG model | Vite SSR at build time | RSC + static export |
-| State mgmt | `ref` / `computed` | `useState` / `useMemo` |
-| Routing | None (single page) | None (single page) |
-| Styling | `<style scoped>` | Global CSS, BEM |
-| Build dir | `dist/` | `out/` |
-
-### Key decisions
-
-- **Next.js App Router** over Vite + React for first-class SSR/RSC, future-proofing
-- **Static export** (`output: 'export'`) preserves the static-site deployment model
-- **Server components by default** — only 5 of 13 components need `'use client'`
-- **BEM class names preserved** — same CSS ported 1:1, zero visual changes
-- **Dual selector fix** — featured project cover images needed `.card--feature .card__thumb-logo--cover` to match Vue's scoped-CSS specificity
-
-### Gotchas encountered
-
-- `write` tool writes to host workspace, not the sandbox — needed `cp -r` to bridge during porting
-- `sed` ate `\n` in replacement string — switch to Python `str.replace()` for exact-string edits
-- `mv tmp target` on an existing target creates `target/tmp/` (nested) — always `rm -rf target` before `mv`
-- Vue scoped CSS `[data-v-xxx]` specificity bump doesn't exist in global CSS — dual selector pattern needed
 
 ## License
 

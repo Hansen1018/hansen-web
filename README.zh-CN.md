@@ -2,7 +2,7 @@
 
 > [English](./README.md) | 中文
 
-基于 **Next.js 14 App Router + React 18 + TypeScript** 构建的个人主页。玻璃拟态设计 + 极光氛围背景 + 跨设备同步点赞 + Hugo 博客构建期联动。
+基于 **Next.js 14 App Router + React 18 + TypeScript** 构建的个人主页。玻璃拟态设计 + 极光氛围背景 + Hugo 博客构建期联动。
 
 **在线访问**：https://hansendong.top
 
@@ -32,7 +32,6 @@
 - **玻璃拟态 + 极光背景** —— 三团漂浮的径向光晕 + 颗粒噪点叠加 + `backdrop-filter` 玻璃卡片
 - **滚动监听** —— 单一 `IntersectionObserver` 同时驱动桌面 `SideNav` 和移动端 `MobileMenu`（`NavController` 封装）
 - **Hero 打字机** —— `type → pause → delete` 状态机，带 `prefers-reduced-motion` 守卫
-- **跨设备点赞同步** —— `likes.json` 后端（`python -m http.server` 即可跑），部署在 `/var/www/blog/like-server.py`
 - **博客 Feed 同步** —— `scripts/fetch-blog-feed.mjs` 构建期抓 Hugo 博客 → `public/blog-feed.json`
 - **Open Graph + JSON-LD** —— 完整的元数据 API：`Person` + `WebSite` + `WebPage` 结构化数据
 - **移动优先响应式** —— 断点 640 / 720 / 900 / 1180 px
@@ -175,35 +174,6 @@ mv /var/www/hansen-web.tmp /var/www/hansen-web
 
 页面特有增量：hero 打字机（`HeroSection`）+ scroll-spy（`useActiveSection`）+ 移动端抽屉（`MobileMenu`）+ 博客 fetch（`BlogSection`）在共享基线上加 ~7.8 kB。静态 section（About / Skills / Timeline / SideHustle / Contact）加 0 kB。
 
-## 从 Vue 3 迁移
-
-原 Vue 3 + Vite + vite-ssg 源码在切换期间备份在 `hansen-web-vue-bak/`，部署完成后已删除。Git 历史里还能找到。
-
-| | Vue 3 + vite-ssg | Next.js 14 App Router |
-| --- | --- | --- |
-| Bundle（gz） | ~33 kB | ~95 kB（First Load JS，未压 gzip 等价约 ~30 kB） |
-| 构建 | `vite-ssg` | `next build` |
-| SSG 模型 | 构建期 Vite SSR | RSC + 静态导出 |
-| 状态管理 | `ref` / `computed` | `useState` / `useMemo` |
-| 路由 | 无（单页） | 无（单页） |
-| 样式 | `<style scoped>` | 全局 CSS · BEM |
-| 构建目录 | `dist/` | `out/` |
-| 模板 | `<template>` + `<script setup>` | JSX + 函数组件 |
-
-### 关键决策
-
-- 选 **Next.js App Router** 而不是 Vite + React，看中的是一等 SSR/RSC 和面向未来的能力
-- **静态导出**（`output: 'export'`）保留了静态站点的部署形态
-- **默认服务端组件** —— 13 个组件里只有 5 个需要 `'use client'`
-- **BEM 类名原样保留** —— CSS 1:1 移植，零视觉变化
-- **双选择器修复** —— 特色项目封面图需要 `.card--feature .card__thumb-logo--cover` 来匹配 Vue scoped-CSS 的特异性
-
-### 比预期耗时更久的事
-
-- `write` 工具写到 host workspace，不会进 sandbox —— 移植期间需要 `cp -r` 桥接
-- `sed` 会吃掉替换字符串里的 `\n` —— 多行编辑切到 Python `str.replace()` 做精确字符串替换
-- 对已存在的 target 跑 `mv tmp target` 会创建出 `target/tmp/`（嵌套目录）—— `mv` 之前永远先 `rm -rf target`
-- Vue scoped CSS 的 `[data-v-xxx]` 特异性提升在全局 CSS 里不存在 —— 需要双选择器模式
 
 ## License
 
