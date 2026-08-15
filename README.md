@@ -1,8 +1,26 @@
 # Hansen Web · Personal Site
 
+> [English](./README.md) · [中文](./README.zh-CN.md)
+
 Luminous personal portfolio built with **Next.js 14 App Router + React 18 + TypeScript**. Glassmorphism design, aurora ambience, scroll-spy navigation, typewriter hero, and a blog feed synced build-time from the Hugo blog.
 
 **Live**: https://hansendong.top
+
+---
+
+## Preview
+
+| Desktop | Mobile |
+| --- | --- |
+| ![Desktop full page](./screenshots/desktop-full.png) | ![Mobile full page](./screenshots/mobile-full.png) |
+
+Desktop hero (above the fold):
+
+![Desktop hero](./screenshots/desktop-hero.png)
+
+Mobile menu drawer:
+
+![Mobile menu open](./screenshots/mobile-menu-open.png)
 
 ---
 
