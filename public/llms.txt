@@ -1,0 +1,38 @@
+# Hansen
+
+> 1989 年生，深圳。Vibe Coding 工程师、博主、客制外设经销。
+
+## 关于
+Hansen 是一个闷骚的完美主义者，乐观、友善，内外向结合型。
+草根 Blogger、资深网民，常口出"狂言"，但对自己说过的话一定负责。
+
+## 时间线
+- 1989 年 出生于中国
+- 2004 年 触网（BBS / 论坛 / QQ / 微博）
+- 2008–2024 年 淘宝店主（先做衣服、包、鞋分销，2015 年起转向美国电竞客制化键盘、鼠标垫）
+- 2013 年 开始写博客
+- 2015–2024 年 个人 SOHO（美国客制化键盘、鼠标垫经销）
+- 2026 年 1 月 Fork 开源 AI 交易系统 nofx，加入 GitHub 社区
+- 2026 年至今  Vibe Coding 工程师（让 AI 写代码，本人负责 vibe、验收和较真）
+
+## 技能栈
+- 主语言：Go、TypeScript
+- 脚本与构建：Shell、Python、Makefile
+- 前端：CSS、JavaScript、HTML
+
+## 精选项目
+- [nofx](https://github.com/Hansen1018/nofx) — 开源 AI 交易操作系统，市场数据 → AI 推理 → 交易执行，自托管多交易所支持。
+
+## 副业
+- PT 刷流：长期挂机刷 PT 流量换资源
+  - 探针：https://status.hansendong.top
+- 服务器租用：NETCUP VPS、独立服务器租用，纯租不刷也接
+
+## 联系方式
+- 邮箱：hansendong1018@gmail.com
+- GitHub：https://github.com/Hansen1018
+- Twitter：https://twitter.com/Hansen1018
+- Telegram：https://t.me/Hansen1018
+
+## 所在地
+中国 · 深圳

@@ -1,0 +1,15 @@
+{
+  "version": "1.0",
+  "type": "rich",
+  "title": "Hansen · 主页",
+  "author_name": "Hansen",
+  "author_url": "https://hansendong.top/",
+  "provider_name": "Hansen",
+  "provider_url": "https://hansendong.top/",
+  "html": "<blockquote><strong>Hansen</strong> — 1989 年生于深圳，Vibe Coding 工程师、博主、客制外设经销。<br><a href=\"https://hansendong.top/\">hansendong.top</a></blockquote>",
+  "width": 600,
+  "height": 200,
+  "thumbnail_url": "https://hansendong.top/og.png",
+  "thumbnail_width": 1200,
+  "thumbnail_height": 630
+}
