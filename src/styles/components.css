@@ -508,8 +508,12 @@
   animation: spin 18s linear infinite;
 }
 
+/* mobile: keep avatar ring identical to desktop (blur + spin + 0.55)
+   per user request — Vue3 disabled these for frame-jitter reasons but
+   user prefers visual consistency over that micro-optimization. */
 @media (max-width: 720px) {
-  .hero__avatar-ring { filter: none; animation: none; opacity: 0.35; }
+  /* intentionally no .hero__avatar-ring overrides — desktop styles apply */
+  .hero__name-text { font-size: clamp(40px, 13vw, 72px); }
 }
 
 .hero__avatar-core {
@@ -703,7 +707,7 @@
   font-size: clamp(48px, 9vw, 96px);
   font-weight: 700;
   letter-spacing: -0.04em;
-  background: linear-gradient(180deg, #fff 0%, rgba(255, 255, 255, 0.6) 100%);
+  background: linear-gradient(180deg, var(--ink-1) 0%, var(--ink-3) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
