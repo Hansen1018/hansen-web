@@ -890,6 +890,7 @@
 .card--feature .card__thumb-logo { height: 86%; max-height: 380px; }
 .card:hover .card__thumb-logo { transform: scale(1.08) rotate(-3deg); }
 
+.card--feature .card__thumb-logo--cover,
 .card__thumb-logo--cover {
   position: absolute;
   inset: 0;
