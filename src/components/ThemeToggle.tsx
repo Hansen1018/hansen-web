@@ -6,7 +6,8 @@ type Theme = 'dark' | 'light'
 
 /**
  * ThemeToggle — 右上角悬浮按钮，切换 data-theme 并写 localStorage。
- * 初始状态在客户端 mount 后才读取，避免 SSR/CSR 主题不一致闪烁。
+ * 默认渲染 Sun 图标（假设深色），所以 SSR / 首次 paint 也有图标可见。
+ * 客户端 mount 后从 data-theme 读实际值再校正。
  */
 export default function ThemeToggle() {
   const [theme, setTheme] = useState<Theme>('dark')
@@ -28,6 +29,9 @@ export default function ThemeToggle() {
     } catch {}
   }
 
+  // mount 后：dark → 显示 Sun（点击去浅色）；light → 显示 Moon（点击回深色）
+  // mount 前：始终 Sun（首次访问默认深色）
+  const isDark = !mounted || theme === 'dark'
   const label = !mounted
     ? '主题切换'
     : theme === 'dark'
@@ -42,8 +46,8 @@ export default function ThemeToggle() {
       aria-label={label}
       title={label}
     >
-      <span className="theme-toggle__icon" aria-hidden="true">
-        {mounted && (theme === 'dark' ? <SunIcon /> : <MoonIcon />)}
+      <span className="theme-toggle__icon" aria-hidden="true" suppressHydrationWarning>
+        {isDark ? <SunIcon /> : <MoonIcon />}
       </span>
     </button>
   )
@@ -57,7 +61,7 @@ function SunIcon() {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.6"
+      strokeWidth="1.7"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
@@ -76,7 +80,7 @@ function MoonIcon() {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.6"
+      strokeWidth="1.7"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
