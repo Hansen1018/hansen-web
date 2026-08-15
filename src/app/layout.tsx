@@ -5,8 +5,11 @@ import '../styles/components.css'
 const SITE_URL = 'https://hansendong.top'
 
 export const viewport: Viewport = {
-  themeColor: '#0b0d12',
-  colorScheme: 'dark',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#f4f6fb' },
+    { media: '(prefers-color-scheme: dark)', color: '#0a0c12' },
+  ],
+  colorScheme: 'light dark',
   width: 'device-width',
   initialScale: 1,
 }
@@ -100,9 +103,19 @@ const jsonLd = {
   ],
 }
 
+/**
+ * Pre-paint theme bootstrap. Reads localStorage / OS preference and sets
+ * data-theme on <html> before first paint to avoid light/dark flash.
+ * Inlined so it runs synchronously before any CSS / React hydration.
+ */
+const themeScript = `(function(){try{var s=localStorage.getItem('theme');var m=window.matchMedia('(prefers-color-scheme: light)');var t=s||(m&&m.matches?'light':'dark');document.documentElement.setAttribute('data-theme',t);}catch(e){}})();`
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="zh-CN">
+    <html lang="zh-CN" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body>
         {children}
         <script

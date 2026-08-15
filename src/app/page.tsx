@@ -1,5 +1,6 @@
 import BackgroundLayer from '@/components/BackgroundLayer'
 import NavController from '@/components/NavController'
+import ThemeToggle from '@/components/ThemeToggle'
 import HeroSection from '@/components/HeroSection'
 import AboutSection from '@/components/AboutSection'
 import ProjectsSection from '@/components/ProjectsSection'
@@ -14,6 +15,7 @@ export default function HomePage() {
     <>
       <BackgroundLayer />
       <NavController />
+      <ThemeToggle />
       <main className="page">
         <HeroSection />
         <AboutSection />

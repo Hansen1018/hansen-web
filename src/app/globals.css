@@ -41,6 +41,46 @@
   --radius-xl: 32px;
 }
 
+/* —— 浅色模式：覆盖语义化变量 + 滚动条 + 选中态 —— */
+[data-theme="light"] {
+  --bg-0: #f4f6fb;
+  --bg-1: #ffffff;
+  --ink-1: rgba(8, 12, 24, 0.94);
+  --ink-2: rgba(8, 12, 24, 0.7);
+  --ink-3: rgba(8, 12, 24, 0.48);
+  --ink-4: rgba(8, 12, 24, 0.28);
+  --line: rgba(8, 12, 24, 0.08);
+  --line-strong: rgba(8, 12, 24, 0.16);
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-bg-hover: rgba(255, 255, 255, 0.86);
+  --glass-border: rgba(8, 12, 24, 0.1);
+  --glass-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.6) inset,
+    0 0 0 1px rgba(8, 12, 24, 0.05),
+    0 24px 48px -16px rgba(8, 12, 24, 0.14),
+    0 10px 20px -8px rgba(8, 12, 24, 0.08);
+}
+
+[data-theme="light"] body {
+  background:
+    radial-gradient(1200px 800px at 80% -10%, rgba(124, 92, 255, 0.12), transparent 60%),
+    radial-gradient(900px 700px at -10% 110%, rgba(34, 211, 238, 0.1), transparent 60%),
+    var(--bg-0);
+}
+
+[data-theme="light"] ::selection {
+  background: rgba(124, 92, 255, 0.22);
+  color: rgba(8, 12, 24, 0.94);
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: rgba(8, 12, 24, 0.14);
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(8, 12, 24, 0.22);
+}
+
 *,
 *::before,
 *::after {
