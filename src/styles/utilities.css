@@ -1,0 +1,29 @@
+/* —— Utilities —— — also: Fade-up 动画（hero__inner 用）, Page wrapper */
+
+
+/* —— Fade-up 动画（hero__inner 用） —— */
+.fade-up {
+  opacity: 0;
+  transform: translateY(8px);
+  animation: fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes fade-up {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-up { animation: none; opacity: 1; transform: none; }
+}
+
+/* —— Page wrapper —— */
+.page {
+  position: relative;
+  z-index: 1;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 clamp(20px, 4vw, 56px);
+}

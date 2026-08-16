@@ -1,0 +1,61 @@
+/* —— Theme Toggle —— (主题切换按钮（固定右上）) */
+
+
+/* —— 主题切换按钮（固定右上） —— */
+.theme-toggle {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 50;
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  box-shadow: var(--glass-shadow);
+  transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease, transform 0.18s ease;
+}
+
+.theme-toggle:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.28);
+  transform: scale(1.06);
+}
+
+.theme-toggle:active {
+  transform: scale(0.94);
+}
+
+.theme-toggle__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+[data-theme="light"] .theme-toggle {
+  background: rgba(255, 255, 255, 0.78);
+  border-color: rgba(8, 12, 24, 0.14);
+  color: rgba(8, 12, 24, 0.78);
+}
+
+[data-theme="light"] .theme-toggle:hover {
+  background: rgba(255, 255, 255, 0.92);
+  color: rgba(8, 12, 24, 0.94);
+  border-color: rgba(8, 12, 24, 0.24);
+}
+
+@media (max-width: 720px) {
+  .theme-toggle {
+    top: 14px;
+    right: 64px;
+    width: 36px;
+    height: 36px;
+  }
+}

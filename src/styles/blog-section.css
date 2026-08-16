@@ -1,0 +1,105 @@
+/* —— Blog Section —— (BlogSection) */
+
+
+/* —— BlogSection —— */
+.blog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.blog-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1.25rem 1.25rem 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015));
+  transition:
+    transform 0.2s,
+    border-color 0.2s,
+    background 0.2s;
+}
+
+.blog-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(120, 200, 220, 0.45);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.025));
+}
+
+.blog-card__meta {
+  font-size: 0.72rem;
+  color: var(--ink-3);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.blog-card__title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.blog-card__title a { color: inherit; text-decoration: none; }
+.blog-card__title a:hover { color: rgb(120, 220, 235); }
+
+.blog-card__desc {
+  font-size: 0.875rem;
+  color: var(--ink-2);
+  line-height: 1.55;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.blog-card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: auto;
+  padding-top: 0.5rem;
+}
+
+.blog-tag {
+  font-size: 0.68rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  color: var(--ink-2);
+}
+
+.blog-loading {
+  color: var(--ink-3);
+  font-size: 0.9rem;
+  padding: 1rem 0;
+}
+
+.blog-loading a {
+  color: rgb(120, 220, 235);
+  text-decoration: none;
+}
+
+[data-theme="light"] .blog-loading a {
+  color: var(--accent-2);
+}
+
+.blog-more {
+  display: block;
+  margin-top: 0.5rem;
+  text-align: right;
+  font-size: 0.9rem;
+  color: rgb(120, 220, 235);
+  text-decoration: none;
+}
+
+[data-theme="light"] .blog-more {
+  color: var(--accent-2);
+}
+
+.blog-more:hover { text-decoration: underline; }

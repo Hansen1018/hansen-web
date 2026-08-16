@@ -2,7 +2,7 @@
 
 > [English](./README.md) | 中文
 
-基于 **Next.js 14 App Router + React 18 + TypeScript** 构建的个人主页。玻璃拟态设计 + 极光氛围背景 + Hugo 博客构建期联动。
+基于 **Next.js App Router + React + TypeScript** 构建的个人主页。玻璃拟态设计 + 极光氛围背景 + Hugo 博客构建期联动。
 
 **在线访问**：https://hansendong.top
 
@@ -26,8 +26,8 @@
 
 ## 功能特性
 
-- **Next.js 14 App Router** + `output: 'export'` —— 纯静态站点，零运行时成本
-- **React 18** 默认走服务端组件；13 个组件里只有 5 个需要打包客户端 JS
+- **Next.js App Router** + `output: 'export'` —— 纯静态站点，零运行时成本
+- **React** 默认走服务端组件；13 个组件里只有 5 个需要打包客户端 JS
 - **TypeScript strict** —— 数据、Hook、组件全程类型安全
 - **玻璃拟态 + 极光背景** —— 三团漂浮的径向光晕 + 颗粒噪点叠加 + `backdrop-filter` 玻璃卡片
 - **滚动监听** —— 单一 `IntersectionObserver` 同时驱动桌面 `SideNav` 和移动端 `MobileMenu`（`NavController` 封装）
@@ -40,11 +40,11 @@
 
 | 层 | 工具 | 版本 |
 | --- | --- | --- |
-| 框架 | Next.js（App Router，`output: 'export'`） | 14.2.18 |
-| UI | React + react-dom | 18.3.1 |
-| 语言 | TypeScript（strict） | 5.5.3 |
+| 框架 | Next.js（App Router，`output: 'export'`） | — |
+| UI | React + react-dom | — |
+| 语言 | TypeScript（strict） | — |
 | 样式 | 原生 CSS · BEM 命名 | — |
-| 图片生成 | sharp（SVG → PNG for `og.png`） | 0.33.5 |
+| 图片生成 | sharp（SVG → PNG for `og.png`） | — |
 | RSS / 博客 feed | Hugo 博客 → JSON（构建期拉取） | — |
 | 部署 | `rsync` over SSH → `/var/www/hansen-web/` | — |
 

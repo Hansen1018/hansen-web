@@ -1,0 +1,109 @@
+/* —— Timeline Section —— (TimelineSection) */
+
+
+/* —— TimelineSection —— */
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  position: relative;
+}
+
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 8px;
+  bottom: 8px;
+  width: 1px;
+  background: linear-gradient(180deg, transparent, var(--line-strong) 12%, var(--line-strong) 88%, transparent);
+}
+
+.timeline__item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 24px;
+  padding: 12px 0 28px;
+}
+.timeline__item:last-child { padding-bottom: 0; }
+
+.timeline__node {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  padding-top: 14px;
+}
+
+.timeline__dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--bg-0);
+  border: 2px solid var(--ink-3);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.02);
+  transition:
+    background 0.3s ease,
+    border-color 0.3s ease,
+    box-shadow 0.3s ease;
+}
+
+.timeline__item:hover .timeline__dot {
+  background: var(--accent-1);
+  border-color: var(--accent-1);
+  box-shadow:
+    0 0 0 4px rgba(124, 92, 255, 0.15),
+    0 0 16px rgba(124, 92, 255, 0.5);
+}
+
+.timeline__card {
+  padding: 16px 20px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--line);
+  transition:
+    background 0.3s ease,
+    border-color 0.3s ease,
+    transform 0.3s ease;
+}
+
+.timeline__item:hover .timeline__card {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--line-strong);
+  transform: translateX(4px);
+}
+
+.timeline__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.timeline__year {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent-2);
+  letter-spacing: 0.1em;
+}
+
+.timeline__org {
+  font-size: 12px;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+}
+
+.timeline__title {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  color: var(--ink-1);
+}
+
+.timeline__desc {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.65;
+}

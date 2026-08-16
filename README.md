@@ -2,7 +2,7 @@
 
 > [English](./README.md) · [中文](./README.zh-CN.md)
 
-Luminous personal portfolio built with **Next.js 14 App Router + React 18 + TypeScript**. Glassmorphism design, aurora ambience, scroll-spy navigation, typewriter hero, and a blog feed synced build-time from the Hugo blog.
+Luminous personal portfolio built with **Next.js App Router + React + TypeScript**. Glassmorphism design, aurora ambience, scroll-spy navigation, typewriter hero, and a blog feed synced build-time from the Hugo blog.
 
 **Live**: https://hansendong.top
 
@@ -26,8 +26,8 @@ Mobile menu drawer:
 
 ## Features
 
-- **Next.js 14 App Router** with `output: 'export'` — pure static site, zero runtime cost
-- **React 18** server components by default; only 5 of 13 components ship client JS
+- **Next.js App Router** with `output: 'export'` — pure static site, zero runtime cost
+- **React** server components by default; only 5 of 13 components ship client JS
 - **TypeScript strict** — full type safety on data, hooks, components
 - **Glassmorphism + aurora background** — three drifting radial blobs, grain noise overlay, glass cards with `backdrop-filter`
 - **Scroll-spy** — single `IntersectionObserver` powers both `SideNav` (desktop) and `MobileMenu` (mobile) via `NavController`
@@ -40,11 +40,11 @@ Mobile menu drawer:
 
 | Layer | Tool | Version |
 |---|---|---|
-| Framework | Next.js (App Router, `output: 'export'`) | 14.2.18 |
-| UI | React + react-dom | 18.3.1 |
-| Language | TypeScript (strict) | 5.5.3 |
+| Framework | Next.js (App Router, `output: 'export'`) | — |
+| UI | React + react-dom | — |
+| Language | TypeScript (strict) | — |
 | Styling | Vanilla CSS · BEM naming | — |
-| Image generation | `sharp` (SVG → PNG for `og.png`) | 0.33.5 |
+| Image generation | `sharp` (SVG → PNG for `og.png`) | — |
 | Blog feed | Hugo blog → JSON (build-time fetch) | — |
 | Deploy | `rsync` → `/var/www/hansen-web/` | — |
 
