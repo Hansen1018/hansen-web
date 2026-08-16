@@ -41,6 +41,19 @@
 .section__index { color: var(--accent-2); font-weight: 500; }
 .section__eyebrow { color: var(--ink-3); }
 
+/* Light mode override —— "03" cyan (#22d3ee) 在浅底 contrast 仅 1.67:1 (FAIL WCAG AA)。
+   不改 hue，加同色 text-shadow glow + font-weight 加重让文字"浮"出来。
+   dark mode 下 --bg-0 深底配 cyan 本来就 contrast 足够，不动。 */
+[data-theme="light"] .section__index {
+  font-weight: 600;
+  text-shadow: 0 0 14px rgba(34, 211, 238, 0.45);
+}
+
+/* Light mode override —— "TOOLBOX" 等 eyebrow 48% 深字在浅底上几乎看不见 */
+[data-theme="light"] .section__eyebrow {
+  color: var(--ink-2);
+}
+
 .section__title {
   margin: 0;
   font-size: clamp(28px, 4vw, 40px);
@@ -49,7 +62,10 @@
   padding-bottom: 4px;
   line-height: 1.1;
   white-space: nowrap;
-  background: linear-gradient(180deg, var(--ink-1) 0%, var(--ink-3) 100%);
+  /* 100% stop 用 --ink-2 (0.72) 而非 --ink-3 (0.48)：
+     dark mode 大写字母底部 48% 透明白在深底上几乎消失，
+     视觉上看着像「B 被切了一半 → B 特别小」。72% 保证底部清晰可读 */
+  background: linear-gradient(180deg, var(--ink-1) 0%, var(--ink-2) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;

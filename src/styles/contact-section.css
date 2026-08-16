@@ -65,6 +65,12 @@
   color: var(--accent-2);
 }
 
+/* Light mode override —— "07 · Get in touch" cyan 在浅底 FAIL WCAG */
+[data-theme="light"] .contact__eyebrow {
+  font-weight: 600;
+  text-shadow: 0 0 12px rgba(34, 211, 238, 0.4);
+}
+
 .contact__title {
   margin: 8px 0 0;
   font-size: clamp(32px, 5vw, 56px);
@@ -133,8 +139,8 @@
   gap: 8px;
   padding: 8px 14px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--line);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
   color: var(--ink-2);
   font-size: 13px;
   text-decoration: none;
@@ -146,10 +152,16 @@
 }
 
 .social:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--glass-bg-hover);
   border-color: var(--line-strong);
   color: var(--ink-1);
   transform: translateY(-2px);
+}
+
+/* Light mode override: social 按钮在浅底上纯白+深色边框 */
+[data-theme="light"] .social {
+  background: var(--bg-1);
+  border-color: rgba(8, 12, 24, 0.18);
 }
 
 .legal {

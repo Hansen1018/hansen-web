@@ -14,9 +14,15 @@
   flex-direction: column;
   gap: 0.5rem;
   padding: 1.25rem 1.25rem 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  /* 改用 var(--glass-bg)/var(--glass-border)：
+     原硬编码 rgba(255,255,255,0.04) 是 dark mode 设计，light mode 下白底配
+     白透 = 卡片轮廓完全消失。变量值已经在 globals.css 按主题切换：
+       dark  --glass-bg=rgba(255,255,255,0.045)  --glass-border=rgba(255,255,255,0.1)
+       light --glass-bg=rgba(255,255,255,0.72)   --glass-border=rgba(8,12,24,0.1)
+     两个模式下都能形成清晰的卡片轮廓 */
+  border: 1px solid var(--glass-border);
   border-radius: 14px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015));
+  background: var(--glass-bg);
   transition:
     transform 0.2s,
     border-color 0.2s,
@@ -25,8 +31,29 @@
 
 .blog-card:hover {
   transform: translateY(-2px);
-  border-color: rgba(120, 200, 220, 0.45);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.025));
+  border-color: rgba(120, 200, 220, 0.55);
+  background: var(--glass-bg-hover);
+}
+/* Light mode 单独加强卡片轮廓：
+   light mode 页面 bg 是 #f4f6fb + radial-gradient overlay（不是纯色）。
+   var(--glass-bg)=rgba(255,255,255,0.72) 在这种带 overlay 的浅底上
+   视觉对比依然不够 → 看着像"裸文本直接铺在背景上"。
+   改用 --bg-1 (#ffffff 纯白) + --line-strong (rgba(8,12,24,0.16))
+   形成清晰的浅色卡片 */
+[data-theme="light"] .blog-card {
+  background: var(--bg-1);
+  border-color: rgba(8, 12, 24, 0.18);
+  box-shadow:
+    0 1px 2px rgba(8, 12, 24, 0.06),
+    0 6px 16px -4px rgba(8, 12, 24, 0.08);
+}
+
+[data-theme="light"] .blog-card:hover {
+  border-color: rgba(34, 211, 238, 0.55);
+  background: var(--bg-1);
+  box-shadow:
+    0 1px 2px rgba(8, 12, 24, 0.08),
+    0 12px 28px -8px rgba(8, 12, 24, 0.14);
 }
 
 .blog-card__meta {
@@ -87,6 +114,7 @@
 
 [data-theme="light"] .blog-loading a {
   color: var(--accent-2);
+  text-shadow: 0 0 10px rgba(34, 211, 238, 0.4);
 }
 
 .blog-more {
@@ -100,6 +128,7 @@
 
 [data-theme="light"] .blog-more {
   color: var(--accent-2);
+  text-shadow: 0 0 10px rgba(34, 211, 238, 0.4);
 }
 
 .blog-more:hover { text-decoration: underline; }

@@ -39,6 +39,11 @@
   transition: color 0.25s ease;
 }
 
+/* Light mode override —— sidenav 右侧圆点在浅底上 48% 灰几乎看不见 */
+[data-theme="light"] .sidenav__btn {
+  color: var(--ink-2);
+}
+
 .sidenav__dot {
   width: 6px;
   height: 6px;
@@ -59,6 +64,15 @@
   box-shadow:
     0 0 0 3px rgba(124, 92, 255, 0.18),
     0 0 16px rgba(124, 92, 255, 0.5);
+}
+
+/* Light mode override —— active dot 在浅底 violet glow 偏弱，加 cyan outer glow 层
+   （保留原 violet 阴影 + 叠 cyan halo，hue #22d3ee 不变） */
+[data-theme="light"] .sidenav__item.is-active .sidenav__dot {
+  box-shadow:
+    0 0 0 3px rgba(124, 92, 255, 0.22),
+    0 0 10px rgba(124, 92, 255, 0.45),
+    0 0 22px rgba(34, 211, 238, 0.6);
 }
 
 .sidenav__btn:hover { color: var(--ink-1); }
@@ -85,6 +99,14 @@
     transform 0.2s ease;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+}
+
+/* Light mode override —— tooltip 硬编码 dark bg 在 light mode 下
+   --ink-1 文字也是深色 → 深字+深底=完全看不见。
+   翻成浅色 tooltip 跟整体 light 风格一致 */
+[data-theme="light"] .sidenav__label {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(8, 12, 24, 0.15);
 }
 
 .sidenav__btn:hover .sidenav__label,

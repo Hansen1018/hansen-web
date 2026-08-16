@@ -8,10 +8,12 @@
   top: 14px;
   right: 14px;
   z-index: 100;
-  width: 44px;
-  height: 44px;
+  /* 36×36 — 跟 mobile 端 ThemeToggle (width: 36px @ <720px) 尺寸一致 */
+  width: 36px;
+  height: 36px;
   padding: 0;
-  border-radius: var(--radius-sm);
+  /* 完全圆，跟右上角 ThemeToggle (border-radius: 999px) 视觉一致 */
+  border-radius: 999px;
   border: 1px solid var(--glass-border);
   background: var(--glass-bg);
   -webkit-backdrop-filter: blur(20px) saturate(140%);
@@ -21,12 +23,20 @@
   cursor: pointer;
   align-items: center;
   justify-content: center;
-  transition: background 0.2s, border-color 0.2s;
+  transition:
+    background 0.2s,
+    border-color 0.2s,
+    transform 0.18s ease;
 }
 
 .m-menu-btn:hover {
   background: var(--glass-bg-hover);
   border-color: var(--line-strong);
+  transform: scale(1.06);
+}
+
+.m-menu-btn:active {
+  transform: scale(0.94);
 }
 
 .m-menu-icon {
@@ -126,6 +136,11 @@
     background 0.2s ease;
 }
 
+/* Light mode override —— hamburger drawer 菜单项在浅色时 48% 深字几乎看不见 */
+[data-theme="light"] .m-menu-link {
+  color: var(--ink-2);
+}
+
 .m-menu-link:hover,
 .m-menu-link:focus-visible {
   color: var(--ink-1);
@@ -153,4 +168,12 @@
     0 0 0 3px rgba(124, 92, 255, 0.18),
     0 0 14px rgba(124, 92, 255, 0.45);
   transform: scale(1.35);
+}
+
+/* Light mode override —— 同 side-nav：保留 violet + 加 cyan outer glow */
+[data-theme="light"] .m-menu-item.is-active .m-menu-dot {
+  box-shadow:
+    0 0 0 3px rgba(124, 92, 255, 0.22),
+    0 0 10px rgba(124, 92, 255, 0.4),
+    0 0 20px rgba(34, 211, 238, 0.55);
 }
