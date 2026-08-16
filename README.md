@@ -98,11 +98,33 @@ hansen-web-next/
     │   ├── ContactSection.tsx      # server — presentational
     │   └── socialIcons.ts          # shared SVG paths
     ├── data/
-    │   └── profile.ts              # all content, single typed source
+    │   └── profile/                # all content, split into per-section files
+    │       ├── index.ts            # Profile interface + top-level fields + socials + navSections + aggregator
+    │       ├── about.ts            # {intro, paragraphs, highlights}
+    │       ├── projects.ts         # Project[]
+    │       ├── skills.ts           # SkillGroup[]
+    │       ├── side-hustles.ts     # SideHustle[]
+    │       ├── blog.ts             # BlogConfig
+    │       └── timeline.ts         # TimelineEntry[]
     ├── hooks/
     │   └── useActiveSection.ts     # scroll-spy state machine
     └── styles/
-        └── components.css          # ~1100 lines, all component styles
+        ├── background-layer.css            # BackgroundLayer + aurora
+        ├── side-nav.css                    # SideNav
+        ├── mobile-menu.css                 # MobileMenu
+        ├── section-shell.css               # SectionShell
+        ├── about-section.css               # AboutSection
+        ├── hero-section.css                # HeroSection
+        ├── projects-section.css            # ProjectsSection
+        ├── skills-section.css              # SkillsSection
+        ├── blog-section.css                # BlogSection
+        ├── timeline-section.css            # TimelineSection
+        ├── side-hustle-section.css         # SideHustleSection
+        ├── contact-section.css             # ContactSection
+        ├── theme-toggle.css                # ThemeToggle
+        └── utilities.css                   # Page wrapper
+                                          # Imported individually in layout.tsx
+                                          # (Turbopack doesn't resolve CSS @import)
 ```
 
 ## Architecture
@@ -141,7 +163,9 @@ Seven of the eight section components ship as pure HTML. The interactivity layer
 
 ### CSS
 
-All styles consolidated in `src/styles/components.css` (~1100 lines). Class names follow BEM (`block__element--modifier`). No CSS Modules, no styled-components — direct global CSS since Next.js compiles it once and class names are namespaced enough.
+Styles split across 14 per-section files under `src/styles/`, each imported individually in `src/app/layout.tsx`. Class names follow BEM (`block__element--modifier`). No CSS Modules, no styled-components — direct global CSS since Next.js compiles each file once and class names are namespaced enough.
+
+Why individual imports and not an `@import` aggregator: Next.js 16's default bundler (Turbopack) does not resolve CSS `@import` statements, so a single aggregator file with `@import` lines would ship empty to production. Individual imports avoid the issue and preserve per-file ownership.
 
 Vue version used `<style scoped>` which appended `[data-v-xxx]` attributes for specificity. In Next.js global CSS, the dual selector pattern (`.card--feature .card__thumb-logo--cover, .card__thumb-logo--cover`) replicates the specificity boost that Vue's data attribute provided.
 

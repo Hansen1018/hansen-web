@@ -98,11 +98,33 @@ hansen-web-next/
     │   ├── ContactSection.tsx      # server —— 纯展示
     │   └── socialIcons.ts          # 共享 SVG path
     ├── data/
-    │   └── profile.ts              # 所有内容，单一类型化数据源
+    │   └── profile/                # 全部内容，按 section 拆分的文件
+    │       ├── index.ts            # Profile interface + 顶部字段 + socials + navSections + aggregator
+    │       ├── about.ts            # {intro, paragraphs, highlights}
+    │       ├── projects.ts         # Project[]
+    │       ├── skills.ts           # SkillGroup[]
+    │       ├── side-hustles.ts     # SideHustle[]
+    │       ├── blog.ts             # BlogConfig
+    │       └── timeline.ts         # TimelineEntry[]
     ├── hooks/
     │   └── useActiveSection.ts     # scroll-spy 状态机
     └── styles/
-        └── components.css          # ~1100 行，所有组件样式
+        ├── background-layer.css            # BackgroundLayer + aurora
+        ├── side-nav.css                    # SideNav
+        ├── mobile-menu.css                 # MobileMenu
+        ├── section-shell.css               # SectionShell
+        ├── about-section.css               # AboutSection
+        ├── hero-section.css                # HeroSection
+        ├── projects-section.css            # ProjectsSection
+        ├── skills-section.css              # SkillsSection
+        ├── blog-section.css                # BlogSection
+        ├── timeline-section.css            # TimelineSection
+        ├── side-hustle-section.css         # SideHustleSection
+        ├── contact-section.css             # ContactSection
+        ├── theme-toggle.css                # ThemeToggle
+        └── utilities.css                   # Page wrapper
+                                          # 在 layout.tsx 中分别导入
+                                          # （Turbopack 不解析 CSS @import）
 ```
 
 ## 架构
