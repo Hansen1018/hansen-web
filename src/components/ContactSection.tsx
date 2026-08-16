@@ -1,5 +1,6 @@
 import { profile } from '@/data/profile'
 import { socialIconPaths } from './socialIcons'
+import nextPkg from 'next/package.json'
 
 export default function ContactSection() {
   return (
@@ -68,7 +69,7 @@ export default function ContactSection() {
       <footer className="legal">
         <span>© {new Date().getFullYear()} {profile.name}.</span>
         <span className="legal__sep">·</span>
-        <span>Built with Next.js 16</span>
+        <span>Built with Next.js {nextPkg.version}</span>
       </footer>
     </section>
   )
