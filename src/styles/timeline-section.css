@@ -19,8 +19,8 @@
   background: linear-gradient(180deg, transparent, var(--line-strong) 12%, var(--line-strong) 88%, transparent);
 }
 
-/* Light mode override: 1px + 16% 不透明度在带 grid 的浅底上几乎看不见，
-   加强到 35% 让竖向时间线清晰串起所有节点 */
+/* Light mode override: 1px + 16% opacity nearly invisible on grid-tinted light bg,
+   strengthened to 35% so vertical timeline clearly connects all nodes */
 [data-theme="light"] .timeline::before {
   background: linear-gradient(180deg, transparent, rgba(8, 12, 24, 0.35) 12%, rgba(8, 12, 24, 0.35) 88%, transparent);
 }
@@ -65,8 +65,8 @@
 .timeline__card {
   padding: 16px 20px;
   border-radius: var(--radius-md);
-  /* 改用 var(--glass-bg)：原硬编码 rgba(255,255,255,0.02) 是 dark mode 专属，
-     light mode 下白底配白透 = 卡片轮廓消失（跟 .blog-card 同样的 bug） */
+  /* Switch to var(--glass-bg): original hardcoded rgba(255,255,255,0.02) was dark mode specific;
+     in light mode, white bg + white transparency = card outline disappears (same bug as .blog-card) */
   background: var(--glass-bg);
   border: 1px solid var(--line);
   transition:
@@ -81,8 +81,8 @@
   transform: translateX(4px);
 }
 
-/* Light mode override —— Timeline 卡片比 Blog 卡片略弱（融入时间线），
-   shadow 比 Blog 浅一档（避免时间线上每个 item 都"浮"得很重） */
+/* Light mode override —— Timeline card slightly subtler than Blog card (blends into timeline),
+   shadow one tier lighter than Blog (avoid every timeline item 'floating' too heavily) */
 [data-theme="light"] .timeline__card {
   background: var(--bg-1);
   border-color: rgba(8, 12, 24, 0.15);
@@ -113,7 +113,7 @@
   letter-spacing: 0.1em;
 }
 
-/* Light mode override —— 同色 glow + font-weight 600 (原 400) */
+/* Light mode override —— same-color glow + font-weight 600 (was 400) */
 [data-theme="light"] .timeline__year {
   font-weight: 600;
   text-shadow: 0 0 12px rgba(34, 211, 238, 0.4);

@@ -39,7 +39,7 @@
   transition: color 0.25s ease;
 }
 
-/* Light mode override —— sidenav 右侧圆点在浅底上 48% 灰几乎看不见 */
+/* Light mode override —— sidenav right-side dots: 48% gray nearly invisible on light bg */
 [data-theme="light"] .sidenav__btn {
   color: var(--ink-2);
 }
@@ -66,8 +66,8 @@
     0 0 16px rgba(124, 92, 255, 0.5);
 }
 
-/* Light mode override —— active dot 在浅底 violet glow 偏弱，加 cyan outer glow 层
-   （保留原 violet 阴影 + 叠 cyan halo，hue #22d3ee 不变） */
+/* Light mode override —— active dot violet glow weak on light bg, add cyan outer-glow layer
+   (keep original violet shadow + layer cyan halo, hue #22d3ee unchanged) */
 [data-theme="light"] .sidenav__item.is-active .sidenav__dot {
   box-shadow:
     0 0 0 3px rgba(124, 92, 255, 0.22),
@@ -101,9 +101,9 @@
   -webkit-backdrop-filter: blur(12px);
 }
 
-/* Light mode override —— tooltip 硬编码 dark bg 在 light mode 下
-   --ink-1 文字也是深色 → 深字+深底=完全看不见。
-   翻成浅色 tooltip 跟整体 light 风格一致 */
+/* Light mode override —— tooltip hardcoded dark bg in light mode:
+   --ink-1 text is also dark → dark text on dark bg = completely invisible.
+   Flipped to light tooltip consistent with overall light style */
 [data-theme="light"] .sidenav__label {
   background: rgba(255, 255, 255, 0.92);
   border-color: rgba(8, 12, 24, 0.15);

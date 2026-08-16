@@ -9,9 +9,9 @@ interface MobileMenuProps {
 }
 
 /**
- * MobileMenu — 移动端汉堡菜单 + 抽屉 + 遮罩。
- * 用 CSS class 切换代替 Vue 的 <Transition>，效果一致。
- * body 滚动锁：open 时 overflow:hidden，close/卸载时还原。
+ * MobileMenu — mobile hamburger menu + drawer + backdrop.
+ * Uses CSS class toggling instead of Vue's <Transition>, with matching effects.
+ * body scroll lock: overflow:hidden when open, restored on close/unmount.
  */
 export default function MobileMenu({ active, onJump }: MobileMenuProps) {
   const [open, setOpen] = useState(false)

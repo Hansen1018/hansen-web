@@ -6,7 +6,7 @@ interface SideNavProps {
 }
 
 /**
- * SideNav — 右侧固定圆点导航。仅展示，状态由 NavController 管理。
+ * SideNav — right-side fixed dot navigation. Display only; state managed by NavController.
  */
 export default function SideNav({ active, onJump }: SideNavProps) {
   return (

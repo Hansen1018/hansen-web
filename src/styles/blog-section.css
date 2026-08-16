@@ -14,12 +14,13 @@
   flex-direction: column;
   gap: 0.5rem;
   padding: 1.25rem 1.25rem 1rem;
-  /* 改用 var(--glass-bg)/var(--glass-border)：
-     原硬编码 rgba(255,255,255,0.04) 是 dark mode 设计，light mode 下白底配
-     白透 = 卡片轮廓完全消失。变量值已经在 globals.css 按主题切换：
+  /* Switch to var(--glass-bg)/var(--glass-border):
+     original hardcoded rgba(255,255,255,0.04) was dark mode specific; in light mode,
+     white bg + white transparency = card outline completely disappears. Variable
+     values are already theme-switched in globals.css:
        dark  --glass-bg=rgba(255,255,255,0.045)  --glass-border=rgba(255,255,255,0.1)
        light --glass-bg=rgba(255,255,255,0.72)   --glass-border=rgba(8,12,24,0.1)
-     两个模式下都能形成清晰的卡片轮廓 */
+     Both modes can form clear card outlines */
   border: 1px solid var(--glass-border);
   border-radius: 14px;
   background: var(--glass-bg);
@@ -34,12 +35,12 @@
   border-color: rgba(120, 200, 220, 0.55);
   background: var(--glass-bg-hover);
 }
-/* Light mode 单独加强卡片轮廓：
-   light mode 页面 bg 是 #f4f6fb + radial-gradient overlay（不是纯色）。
-   var(--glass-bg)=rgba(255,255,255,0.72) 在这种带 overlay 的浅底上
-   视觉对比依然不够 → 看着像"裸文本直接铺在背景上"。
-   改用 --bg-1 (#ffffff 纯白) + --line-strong (rgba(8,12,24,0.16))
-   形成清晰的浅色卡片 */
+/* Light mode: strengthen card outline separately.
+   Light mode page bg is #f4f6fb + radial-gradient overlay (not solid color).
+   var(--glass-bg)=rgba(255,255,255,0.72) on this overlay-tinted light bg has
+   insufficient visual contrast → looks like 'plain text laid directly on background'.
+   Switch to --bg-1 (#ffffff pure white) + --line-strong (rgba(8,12,24,0.16))
+   to form a clear light-mode card */
 [data-theme="light"] .blog-card {
   background: var(--bg-1);
   border-color: rgba(8, 12, 24, 0.18);

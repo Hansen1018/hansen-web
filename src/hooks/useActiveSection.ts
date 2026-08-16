@@ -3,19 +3,19 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 
 /**
- * Scroll-spy: 追踪一组 section 的激活态。
+ * Scroll-spy: tracks the active state of a set of sections.
  *
- * 算法（top-based，1:1 移植自 Vue 版 composables/useActiveSection.js）：
- *   1. 选「rect.top <= triggerY(0.3*innerHeight) && rect.top 最大」的 section
- *   2. 末尾节兜底：最后一节完整在视口里时强制选它
- *   3. 顶部兜底
+ * Algorithm (top-based, 1:1 ported from Vue version composables/useActiveSection.js):
+ *   1. Pick the section where "rect.top <= triggerY(0.3*innerHeight) && rect.top is the largest"
+ *   2. Last-section fallback: force-pick the last section when it's fully in viewport
+ *   3. Top fallback
  *
- * 即时锁（scrollTo 时）：
- *   smooth-scroll 动画期间 IO 算法会按 ratio 选错节。
- *   scrollTo 时立即锁 active 到目标 id，scroll 期间不重算；
- *   用 scrollend 事件解锁（浏览器原生），无 scrollend 支持时用 3000ms 兜底。
+ * Instant lock (on scrollTo):
+ *   During smooth-scroll animation, the IO algorithm picks the wrong section by ratio.
+ *   On scrollTo, immediately lock active to the target id; don't recompute during scroll;
+ *   Unlock via scrollend event (browser-native), with a 3000ms fallback when scrollend isn't supported.
  *
- * @param ids section id 列表（DOM 查找用）
+ * @param ids list of section ids (for DOM lookup)
  * @returns { active, scrollTo }
  */
 export function useActiveSection(ids: readonly string[]) {

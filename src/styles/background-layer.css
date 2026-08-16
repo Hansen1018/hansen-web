@@ -1,4 +1,4 @@
-/* —— Background Layer —— (BackgroundLayer) — also: 浅色模式 aurora */
+/* —— Background Layer —— (BackgroundLayer) — also: light mode aurora */
 
 
 /* —— BackgroundLayer —— */
@@ -89,7 +89,7 @@
   mix-blend-mode: overlay;
 }
 
-/* —— 浅色模式 aurora —— */
+/* —— Light mode aurora —— */
 [data-theme="light"] .aurora__grid {
   background-image:
     linear-gradient(to right, rgba(8, 12, 24, 0.05) 1px, transparent 1px),

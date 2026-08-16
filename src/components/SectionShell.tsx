@@ -11,9 +11,9 @@ interface SectionShellProps {
 }
 
 /**
- * SectionShell — 通用 section 容器：head + 双向 fade in/out。
- * 1:1 移植自 Vue 版，移除 transform 位移 + 150ms 节流 + rAF 兜底，
- * 杜绝「滚动到顶部时精选项目卡片快速抖动」。
+ * SectionShell — generic section container: head + bidirectional fade in/out.
+ * 1:1 ported from Vue version, removed transform offset + 150ms throttle + rAF fallback,
+ * eliminating "fast jitter of curated project cards when scrolling to top".
  */
 export default function SectionShell({ id, index, eyebrow, title, children }: SectionShellProps) {
   const rootRef = useRef<HTMLElement>(null)
@@ -23,7 +23,7 @@ export default function SectionShell({ id, index, eyebrow, title, children }: Se
     const el = rootRef.current
     if (!el) return
 
-    // 初始检查：已可见就直接显示
+    // Initial check: show directly if already visible
     const rect = el.getBoundingClientRect()
     if (rect.top < window.innerHeight * 0.85 && rect.bottom > 0) {
       setVisible(true)

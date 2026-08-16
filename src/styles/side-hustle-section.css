@@ -64,8 +64,8 @@
   flex: 0 0 auto;
 }
 
-/* Light mode override —— status 徽章 cyan 在浅底文字看不清 + bg/border 太弱。
-   升 bg/border 不透明度 + box-shadow cyan glow 让徽章"立"起来 */
+/* Light mode override —— status badge cyan: text unclear on light bg + bg/border too weak.
+   Increased bg/border opacity + box-shadow cyan glow to make the badge 'stand out' */
 [data-theme="light"] .hustle__status {
   background: rgba(34, 211, 238, 0.12);
   border-color: rgba(34, 211, 238, 0.45);
@@ -131,7 +131,7 @@
   transition: transform 0.3s ease, color 0.3s ease;
 }
 
-/* Light mode override —— cyan CTA 在浅底 FAIL WCAG，加同色 glow */
+/* Light mode override —— cyan CTA fails WCAG on light bg, add same-color glow */
 [data-theme="light"] .hustle__cta {
   text-shadow: 0 0 10px rgba(34, 211, 238, 0.4);
 }

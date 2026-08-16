@@ -7,9 +7,9 @@ import SideNav from './SideNav'
 import MobileMenu from './MobileMenu'
 
 /**
- * NavController — scroll-spy 状态中枢。
- * 调用 useActiveSection 一次，把 active + scrollTo 同时喂给 SideNav / MobileMenu，
- * 避免两个组件各跑一份 IntersectionObserver / scroll listener。
+ * NavController — scroll-spy state hub.
+ * Calls useActiveSection once, feeds active + scrollTo to both SideNav / MobileMenu,
+ * avoiding two components each running their own IntersectionObserver / scroll listener.
  */
 export default function NavController() {
   const ids = useMemo(() => navSections.map((s) => s.id), [])

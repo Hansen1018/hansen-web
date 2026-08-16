@@ -1,7 +1,7 @@
-/* —— Theme Toggle —— (主题切换按钮（固定右上）) */
+/* —— Theme Toggle —— (theme toggle button (fixed top-right)) */
 
 
-/* —— 主题切换按钮（固定右上） —— */
+/* —— Theme toggle button (fixed top-right) —— */
 .theme-toggle {
   position: fixed;
   top: 18px;

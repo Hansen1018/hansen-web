@@ -1,5 +1,5 @@
 :root {
-  /* —— 颜色 —— */
+  /* —— Colors —— */
   --bg-0: #0a0c12;
   --bg-1: #0f121a;
   --ink-1: rgba(255, 255, 255, 0.96);
@@ -28,20 +28,20 @@
     rgba(34, 211, 238, 0.18) 100%
   );
 
-  /* —— 排版 —— */
+  /* —— Typography —— */
   --font-sans:
     'Inter', 'PingFang SC', 'HarmonyOS Sans', 'Microsoft YaHei',
     -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  /* —— 尺寸 —— */
+  /* —— Sizes —— */
   --radius-sm: 12px;
   --radius-md: 18px;
   --radius-lg: 24px;
   --radius-xl: 32px;
 }
 
-/* —— 浅色模式：覆盖语义化变量 + 滚动条 + 选中态 —— */
+/* —— Light mode: override semantic variables + scrollbar + selection —— */
 [data-theme="light"] {
   --bg-0: #f4f6fb;
   --bg-1: #ffffff;
@@ -89,7 +89,7 @@
 
 html {
   scroll-behavior: smooth;
-  /* 锚点跳转时避开顶部 0 像素（让 Hero 不被裁切） */
+  /* Avoid 0px top offset on anchor jumps (so Hero isn't clipped) */
   scroll-padding-top: 0;
 }
 
@@ -109,7 +109,7 @@ body {
 }
 
 body {
-  /* 基底深色 + 细微噪点，避免大面积纯色发灰 */
+  /* Base dark + subtle noise, avoids large solid color areas graying out */
   background:
     radial-gradient(1200px 800px at 80% -10%, rgba(124, 92, 255, 0.12), transparent 60%),
     radial-gradient(900px 700px at -10% 110%, rgba(34, 211, 238, 0.1), transparent 60%),
@@ -140,7 +140,7 @@ button {
   color: #fff;
 }
 
-/* 滚动条 */
+/* Scrollbar */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -157,7 +157,7 @@ button {
   border: 2px solid transparent;
 }
 
-/* 通用工具类 */
+/* Utility classes */
 .glass {
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
@@ -167,7 +167,7 @@ button {
   -webkit-backdrop-filter: blur(24px) saturate(140%);
 }
 
-/* 进入动画 */
+/* Entrance animation */
 @keyframes fade-up {
   from {
     opacity: 0;
@@ -183,7 +183,7 @@ button {
   animation: fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-/* 媒体查询：减少动效 */
+/* Media query: reduced motion */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

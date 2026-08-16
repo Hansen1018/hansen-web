@@ -8,11 +8,11 @@
   top: 14px;
   right: 14px;
   z-index: 100;
-  /* 36×36 — 跟 mobile 端 ThemeToggle (width: 36px @ <720px) 尺寸一致 */
+  /* 36×36 — matches mobile ThemeToggle (width: 36px @ <720px) size */
   width: 36px;
   height: 36px;
   padding: 0;
-  /* 完全圆，跟右上角 ThemeToggle (border-radius: 999px) 视觉一致 */
+  /* Fully circular, visually matches top-right ThemeToggle (border-radius: 999px) */
   border-radius: 999px;
   border: 1px solid var(--glass-border);
   background: var(--glass-bg);
@@ -136,7 +136,7 @@
     background 0.2s ease;
 }
 
-/* Light mode override —— hamburger drawer 菜单项在浅色时 48% 深字几乎看不见 */
+/* Light mode override —— hamburger drawer menu items: 48% dark text nearly invisible on light bg */
 [data-theme="light"] .m-menu-link {
   color: var(--ink-2);
 }
@@ -170,7 +170,7 @@
   transform: scale(1.35);
 }
 
-/* Light mode override —— 同 side-nav：保留 violet + 加 cyan outer glow */
+/* Light mode override —— same as side-nav: keep violet + add cyan outer glow */
 [data-theme="light"] .m-menu-item.is-active .m-menu-dot {
   box-shadow:
     0 0 0 3px rgba(124, 92, 255, 0.22),

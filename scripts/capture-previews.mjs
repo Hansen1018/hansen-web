@@ -1,6 +1,6 @@
 // scripts/capture-previews.mjs
-// 用 playwright（指定系统 chromium）截 https://hansendong.top 各 section 预览图
-// 输出到 public/screenshots/
+// Uses playwright (system chromium) to capture section previews from https://hansendong.top
+// Output to public/screenshots/
 
 import { chromium } from '/usr/local/lib/node_modules/playwright/index.mjs'
 import path from 'node:path'
@@ -38,13 +38,13 @@ if (!resp || !resp.ok()) {
 }
 await page.waitForTimeout(2000)
 
-// 1) 全页
+// 1) Full page
 const fullPath = path.join(OUT_DIR, 'preview-full.png')
 await page.screenshot({ path: fullPath, fullPage: true })
 const fs1 = await fs.stat(fullPath)
 console.log(`✓ preview-full.png    ${fs1.size} bytes`)
 
-// 2) 各 section
+// 2) Each section
 for (const { sel, file } of SECTIONS) {
   const exists = await page.locator(sel).count()
   if (!exists) { console.warn(`⚠ ${sel} 不存在，跳过 ${file}`); continue }

@@ -1,7 +1,7 @@
-/* —— Utilities —— — also: Fade-up 动画（hero__inner 用）, Page wrapper */
+/* —— Utilities —— — also: Fade-up animation (used by hero__inner), Page wrapper */
 
 
-/* —— Fade-up 动画（hero__inner 用） —— */
+/* —— Fade-up animation (used by hero__inner) —— */
 .fade-up {
   opacity: 0;
   transform: translateY(8px);

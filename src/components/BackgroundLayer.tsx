@@ -1,6 +1,6 @@
 /**
- * BackgroundLayer — 极光背景层，纯 CSS 动画。
- * 服务端渲染，零 JS 增量。
+ * BackgroundLayer — aurora background layer, pure CSS animation.
+ * Server-side rendered, zero JS overhead.
  */
 export default function BackgroundLayer() {
   return (

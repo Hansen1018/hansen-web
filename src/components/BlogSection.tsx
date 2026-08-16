@@ -9,16 +9,16 @@ interface BlogPost {
   title: string
   url: string
   description: string
-  content?: string  // hugo index.json 返回的 markdown 全文，目前未消费，typed 保留
+  content?: string  // markdown full text returned by hugo index.json, currently not consumed, kept for typing
   tags?: string[]
 }
 
-const blogCfg = profile.blog  // profile.blog 永远 defined（BlogConfig 必填字段）
+const blogCfg = profile.blog  // profile.blog is always defined (BlogConfig required field)
 
 /**
- * BlogSection — 客户端从 https://blog.hansendong.top/index.json 拉取最近文章。
- * 1:1 移植 Vue 版的 fetch + 加载/错误/空态 fallback。
- * AbortController 防止 unmount 后 setState 触发 React 警告。
+ * BlogSection — client-side fetches latest articles from https://blog.hansendong.top/index.json.
+ * 1:1 port of Vue version's fetch + loading/error/empty-state fallback.
+ * AbortController prevents setState after unmount from triggering React warnings.
  */
 export default function BlogSection() {
   const [posts, setPosts] = useState<BlogPost[]>([])
@@ -49,7 +49,7 @@ export default function BlogSection() {
     }
 
     load()
-    // 5 分钟轮询 + tab 重新可见时立刻拉一次：新文章不用等 reload
+    // 5-minute polling + immediate fetch when tab becomes visible again: new articles don't require reload
     const REFRESH_INTERVAL_MS = 5 * 60 * 1000
     const interval = setInterval(load, REFRESH_INTERVAL_MS)
     const onVisibility = () => {
@@ -63,7 +63,7 @@ export default function BlogSection() {
     }
   }, [])
 
-  // 中文长格式：2026-08-16 → 2026年8月16日
+  // Chinese long format: 2026-08-16 → Aug 16, 2026
   const formatDate = (d: string) => {
     const dt = new Date(d)
     if (isNaN(dt.getTime())) return d

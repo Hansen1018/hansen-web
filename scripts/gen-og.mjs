@@ -1,6 +1,6 @@
 // scripts/gen-og.mjs
-// SVG → PNG 转换，生成社交分享卡片 (1200×630)
-// 在 build 前自动运行 (npm run prebuild)
+// SVG → PNG conversion, generates social share cards (1200×630)
+// Auto-runs before build (npm run prebuild)
 
 import sharp from 'sharp'
 import fs from 'node:fs/promises'

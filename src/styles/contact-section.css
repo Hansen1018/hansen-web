@@ -65,7 +65,7 @@
   color: var(--accent-2);
 }
 
-/* Light mode override —— "07 · Get in touch" cyan 在浅底 FAIL WCAG */
+/* Light mode override —— "07 · Get in touch" cyan fails WCAG on light bg */
 [data-theme="light"] .contact__eyebrow {
   font-weight: 600;
   text-shadow: 0 0 12px rgba(34, 211, 238, 0.4);
@@ -158,7 +158,7 @@
   transform: translateY(-2px);
 }
 
-/* Light mode override: social 按钮在浅底上纯白+深色边框 */
+/* Light mode override: social buttons use pure white + dark border on light bg */
 [data-theme="light"] .social {
   background: var(--bg-1);
   border-color: rgba(8, 12, 24, 0.18);

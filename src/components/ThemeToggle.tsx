@@ -5,9 +5,9 @@ import { useEffect, useState } from 'react'
 type Theme = 'dark' | 'light'
 
 /**
- * ThemeToggle — 右上角悬浮按钮，切换 data-theme 并写 localStorage。
- * 默认渲染 Sun 图标（假设深色），所以 SSR / 首次 paint 也有图标可见。
- * 客户端 mount 后从 data-theme 读实际值再校正。
+ * ThemeToggle — top-right floating button, toggles data-theme and writes localStorage.
+ * Renders Sun icon by default (assumes dark), so SSR / first paint also shows an icon.
+ * Client-side mount: reads actual value from data-theme and corrects.
  */
 export default function ThemeToggle() {
   const [theme, setTheme] = useState<Theme>('dark')
@@ -29,8 +29,8 @@ export default function ThemeToggle() {
     } catch {}
   }
 
-  // mount 后：dark → 显示 Sun（点击去浅色）；light → 显示 Moon（点击回深色）
-  // mount 前：始终 Sun（首次访问默认深色）
+  // After mount: dark → show Sun (click to go light); light → show Moon (click to go dark)
+  // Before mount: always Sun (default dark on first visit)
   const isDark = !mounted || theme === 'dark'
   const label = !mounted
     ? '主题切换'

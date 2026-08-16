@@ -19,7 +19,7 @@
   color: var(--ink-1);
 }
 
-/* Light mode: empty state code 在浅底上用纯白底+深色边框 */
+/* Light mode: empty state code uses pure white bg + dark border on light bg */
 [data-theme="light"] .empty code {
   background: var(--bg-1);
   border: 1px solid rgba(8, 12, 24, 0.18);
@@ -188,7 +188,7 @@
   border-radius: 999px;
 }
 
-/* Light mode override: 卡片内 tag 在浅底上纯白+深色边框 */
+/* Light mode override: card-internal tag uses pure white + dark border on light bg */
 [data-theme="light"] .card__tag {
   background: var(--bg-1);
   border-color: rgba(8, 12, 24, 0.18);

@@ -41,15 +41,15 @@
 .section__index { color: var(--accent-2); font-weight: 500; }
 .section__eyebrow { color: var(--ink-3); }
 
-/* Light mode override —— "03" cyan (#22d3ee) 在浅底 contrast 仅 1.67:1 (FAIL WCAG AA)。
-   不改 hue，加同色 text-shadow glow + font-weight 加重让文字"浮"出来。
-   dark mode 下 --bg-0 深底配 cyan 本来就 contrast 足够，不动。 */
+/* Light mode override —— "03" cyan (#22d3ee) on light bg has contrast only 1.67:1 (FAIL WCAG AA).
+   Without changing hue, added same-color text-shadow glow + heavier font-weight to
+   make text 'float'. In dark mode --bg-0 dark bg + cyan has sufficient contrast, no change. */
 [data-theme="light"] .section__index {
   font-weight: 600;
   text-shadow: 0 0 14px rgba(34, 211, 238, 0.45);
 }
 
-/* Light mode override —— "TOOLBOX" 等 eyebrow 48% 深字在浅底上几乎看不见 */
+/* Light mode override —— "TOOLBOX" and similar eyebrows: 48% dark text nearly invisible on light bg */
 [data-theme="light"] .section__eyebrow {
   color: var(--ink-2);
 }
@@ -62,9 +62,10 @@
   padding-bottom: 4px;
   line-height: 1.1;
   white-space: nowrap;
-  /* 100% stop 用 --ink-2 (0.72) 而非 --ink-3 (0.48)：
-     dark mode 大写字母底部 48% 透明白在深底上几乎消失，
-     视觉上看着像「B 被切了一半 → B 特别小」。72% 保证底部清晰可读 */
+  /* 100% stop uses --ink-2 (0.72) instead of --ink-3 (0.48):
+     in dark mode, 48% opaque white at bottom of uppercase letters nearly disappears
+     on dark bg, visually appears like "B cut in half → B is very small".
+     72% ensures bottom is clearly readable */
   background: linear-gradient(180deg, var(--ink-1) 0%, var(--ink-2) 100%);
   -webkit-background-clip: text;
   background-clip: text;

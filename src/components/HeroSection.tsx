@@ -10,8 +10,8 @@ const PAUSE_FULL = 1600
 const PAUSE_EMPTY = 350
 
 /**
- * HeroSection — 首屏：头像 / 社交 / 状态 chips / 打字机名字 / CTA / 滚动指示。
- * 打字机循环显示 profile.name，type/delete 状态机控制。
+ * HeroSection — first screen: avatar / social / status chips / typewriter name / CTA / scroll indicator.
+ * Typewriter loops profile.name, controlled by type/delete state machine.
  */
 export default function HeroSection() {
   const [typed, setTyped] = useState('')

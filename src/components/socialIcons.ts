@@ -1,6 +1,6 @@
 /**
- * 内联 SVG path 字典 — 给 Hero / Contact 复用，避免引图标库。
- * 完整覆盖 profile.socials 中所有 icon：github / twitter / email / telegram / link / blog / wechat / linkedin
+ * Inline SVG path dictionary — reused by Hero / Contact to avoid pulling in icon libraries.
+ * Fully covers all icons in profile.socials: github / twitter / email / telegram / link / blog / wechat / linkedin
  */
 export const socialIconPaths = {
   github:

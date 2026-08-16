@@ -10,9 +10,9 @@ function hashHue(str: string): number {
 }
 
 /**
- * ProjectsSection — 精选项目卡片网格。
- * hashHue 给每张卡片生成稳定色相；带 logo 的用 logo 缩略图，无 logo 用首字母。
- * 'use client' 是因为 <img onError> 是浏览器端事件。
+ * ProjectsSection — curated project card grid.
+ * hashHue generates a stable hue for each card; cards with logos use logo thumbnails, cards without logos use the first letter.
+ * 'use client' is because <img onError> is a browser-side event.
  */
 export default function ProjectsSection() {
   if (profile.projects.length === 0) {
