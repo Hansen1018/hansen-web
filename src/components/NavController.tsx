@@ -1,5 +1,6 @@
 'use client'
 
+import { useMemo } from 'react'
 import { useActiveSection } from '@/hooks/useActiveSection'
 import { navSections } from '@/data/profile'
 import SideNav from './SideNav'
@@ -11,7 +12,7 @@ import MobileMenu from './MobileMenu'
  * 避免两个组件各跑一份 IntersectionObserver / scroll listener。
  */
 export default function NavController() {
-  const ids = navSections.map((s) => s.id)
+  const ids = useMemo(() => navSections.map((s) => s.id), [])
   const { active, scrollTo } = useActiveSection(ids)
   return (
     <>

@@ -32,7 +32,7 @@ Mobile menu drawer:
 - **Glassmorphism + aurora background** — three drifting radial blobs, grain noise overlay, glass cards with `backdrop-filter`
 - **Scroll-spy** — single `IntersectionObserver` powers both `SideNav` (desktop) and `MobileMenu` (mobile) via `NavController`
 - **Hero typewriter** — `type → pause → delete` state machine with `prefers-reduced-motion` guard
-- **Blog feed sync** — `scripts/fetch-blog-feed.mjs` fetches Hugo blog at build time → `public/blog-feed.json`
+- **Live blog feed** — client-side `fetch()` to `https://blog.hansendong.top/index.json` with `cache: "no-store"`; 5 min poll + `visibilitychange` refresh. No build-time sync.
 - **Open Graph + JSON-LD** — full metadata API: `Person` + `WebSite` + `WebPage` structured data
 - **Mobile-first responsive** — breakpoints at 640 / 720 / 900 / 1180 px
 
@@ -45,7 +45,7 @@ Mobile menu drawer:
 | Language | TypeScript (strict) | — |
 | Styling | Vanilla CSS · BEM naming | — |
 | Image generation | `sharp` (SVG → PNG for `og.png`) | — |
-| Blog feed | Hugo blog → JSON (build-time fetch) | — |
+| Blog feed | Hugo `index.json` (live fetch, CORS-enabled) | — |
 | Deploy | `rsync` → `/var/www/hansen-web/` | — |
 
 ## Quick Start
@@ -60,8 +60,7 @@ npm run build      # outputs to out/
 
 ```
 prebuild
-├── scripts/gen-og.mjs          # public/og.svg → public/og.png (1200×630)
-└── scripts/fetch-blog-feed.mjs # blog.hansendong.top/index.json → public/blog-feed.json
+└── scripts/gen-og.mjs          # public/og.svg → public/og.png (1200×630)
 ```
 
 ## Project Structure
@@ -72,10 +71,9 @@ hansen-web-next/
 ├── next.config.mjs        # output: 'export' + images.unoptimized
 ├── tsconfig.json          # strict mode, @/* path alias
 ├── deploy.sh              # atomic replace + rsync
-├── public/                # favicon, og.svg, blog-feed.json (post-build)
+├── public/                # favicon, og.svg (post-build)
 ├── scripts/
 │   ├── gen-og.mjs         # SVG → PNG
-│   ├── fetch-blog-feed.mjs # Hugo blog → JSON
 │   └── capture-previews.mjs
 └── src/
     ├── app/
@@ -139,7 +137,7 @@ App Router uses React Server Components by default. The site is interactive only
 | `AboutSection` | Server | Pure presentational |
 | `ProjectsSection` | Client | `<img onError>` handler |
 | `SkillsSection` | Server | Pure presentational |
-| `BlogSection` | Client | Fetches `/blog-feed.json` on mount |
+| `BlogSection` | Client | Fetches live Hugo `index.json` on mount + 5 min poll + visibilitychange refresh |
 | `TimelineSection` | Server | Pure presentational |
 | `SideHustleSection` | Server | Pure presentational |
 | `ContactSection` | Server | Pure presentational |

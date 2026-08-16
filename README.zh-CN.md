@@ -32,7 +32,7 @@
 - **玻璃拟态 + 极光背景** —— 三团漂浮的径向光晕 + 颗粒噪点叠加 + `backdrop-filter` 玻璃卡片
 - **滚动监听** —— 单一 `IntersectionObserver` 同时驱动桌面 `SideNav` 和移动端 `MobileMenu`（`NavController` 封装）
 - **Hero 打字机** —— `type → pause → delete` 状态机，带 `prefers-reduced-motion` 守卫
-- **博客 Feed 同步** —— `scripts/fetch-blog-feed.mjs` 构建期抓 Hugo 博客 → `public/blog-feed.json`
+- **博客 Feed 实时拉取** —— 客户端 `fetch()` `https://blog.hansendong.top/index.json`，`cache: "no-store"`；5 分钟轮询 + `visibilitychange` 触发刷新，不需要构建期同步
 - **Open Graph + JSON-LD** —— 完整的元数据 API：`Person` + `WebSite` + `WebPage` 结构化数据
 - **移动优先响应式** —— 断点 640 / 720 / 900 / 1180 px
 
@@ -45,7 +45,7 @@
 | 语言 | TypeScript（strict） | — |
 | 样式 | 原生 CSS · BEM 命名 | — |
 | 图片生成 | sharp（SVG → PNG for `og.png`） | — |
-| RSS / 博客 feed | Hugo 博客 → JSON（构建期拉取） | — |
+| 博客 feed | Hugo `index.json`（实时拉取，CORS 开启） | — |
 | 部署 | `rsync` over SSH → `/var/www/hansen-web/` | — |
 
 ## 快速开始
@@ -56,12 +56,11 @@ npm run dev        # http://localhost:5173
 npm run build      # 输出到 out/
 ```
 
-`npm run build` 会先跑两个 prebuild 步骤：
+`npm run build` 会先跑一个 prebuild 步骤：
 
 ```
 prebuild
-├── scripts/gen-og.mjs           # public/og.svg → public/og.png（1200×630）
-└── scripts/fetch-blog-feed.mjs  # blog.hansendong.top/index.json → public/blog-feed.json
+└── scripts/gen-og.mjs           # public/og.svg → public/og.png（1200×630）
 ```
 
 ## 项目结构
@@ -72,10 +71,9 @@ hansen-web-next/
 ├── next.config.mjs        # output: 'export' + images.unoptimized
 ├── tsconfig.json          # strict 模式，@/* 路径别名
 ├── deploy.sh              # 原子替换 + rsync
-├── public/                # favicon、og.svg、blog-feed.json（构建后产物）
+├── public/                # favicon、og.svg（构建后产物）
 ├── scripts/
-│   ├── gen-og.mjs         # SVG → PNG
-│   └── fetch-blog-feed.mjs # Hugo 博客 → JSON
+│   └── gen-og.mjs         # SVG → PNG
 ├── screenshots/           # README 截图（desktop / mobile）
 └── src/
     ├── app/
@@ -139,7 +137,7 @@ App Router 默认使用 React Server Components。这个站点只在真正需要
 | `AboutSection` | Server | 纯展示 |
 | `ProjectsSection` | Client | `<img onError>` 处理器 |
 | `SkillsSection` | Server | 纯展示 |
-| `BlogSection` | Client | 挂载时拉 `/blog-feed.json` |
+| `BlogSection` | Client | 挂载时实时拉 Hugo `index.json`，5 分钟轮询 + visibilitychange 刷新 |
 | `TimelineSection` | Server | 纯展示 |
 | `SideHustleSection` | Server | 纯展示 |
 | `ContactSection` | Server | 纯展示 |
