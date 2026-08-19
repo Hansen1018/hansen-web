@@ -78,7 +78,7 @@ export default function BlogSection() {
         </div>
       ) : error ? (
         <div className="blog-grid">
-          <p className="blog-loading">博客暂时拿不到，等会再试。({error})</p>
+          <p className="blog-loading">博客最新文章暂时无法索取，等会再试。({error})</p>
         </div>
       ) : posts.length === 0 ? (
         <div className="blog-grid">
