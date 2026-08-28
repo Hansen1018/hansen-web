@@ -1,18 +1,27 @@
 // scripts/gen-og.mjs
-// SVG → PNG conversion, generates social share cards (1200×630)
-// Auto-runs before build (npm run prebuild)
+// SVG → PNG conversion for the social share card (1200×630).
+// Runs automatically before `npm run build` via the `prebuild` script.
 
-import sharp from 'sharp'
-import fs from 'node:fs/promises'
-import path from 'node:path'
+import sharp from 'sharp';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const __dirname = path.dirname(new URL(import.meta.url).pathname)
-const svg = await fs.readFile(path.join(__dirname, '..', 'public', 'og.svg'), 'utf-8')
-const out = path.join(__dirname, '..', 'public', 'og.png')
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const svgPath = path.join(__dirname, '..', 'public', 'og.svg');
+const outPath = path.join(__dirname, '..', 'public', 'og.png');
 
-await sharp(Buffer.from(svg))
-  .png({ compressionLevel: 9 })
-  .toFile(out)
+try {
+  const svg = await fs.readFile(svgPath, 'utf-8');
+  // compressionLevel 6 — flat-color illustrations compress well at level 6,
+  // level 9 adds 3-4× encode time for ~5-10% size.
+  await sharp(Buffer.from(svg))
+    .png({ compressionLevel: 6 })
+    .toFile(outPath);
 
-const stat = await fs.stat(out)
-console.log(`✓ og.png generated (${(stat.size / 1024).toFixed(1)} KB)`)
+  const stat = await fs.stat(outPath);
+  console.log(`✓ og.png generated (${(stat.size / 1024).toFixed(1)} KB)`);
+} catch (err) {
+  console.error('✗ gen-og failed:', err instanceof Error ? err.message : err);
+  process.exitCode = 1;
+}

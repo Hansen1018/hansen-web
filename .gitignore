@@ -1,8 +1,32 @@
+# Dependencies
 node_modules
+
+# Build artifacts
 .next
 out
 dist
-*.log
+*.tsbuildinfo
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# OS / editor
 .DS_Store
-.env*.local
+*.log
+*.bak
+*.swp
+*.swo
+*~
+.idea
+.vscode
+
+# Next.js
 next-env.d.ts
+
+# Coverage / cache
+coverage
+.cache
+.turbo
+.vercel

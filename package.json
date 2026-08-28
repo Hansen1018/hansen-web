@@ -3,11 +3,16 @@
   "version": "0.3.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=20.18"
+  },
   "scripts": {
     "dev": "next dev -p 5173",
+    "prebuild": "node scripts/gen-og.mjs",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "next": "^16.3.1",
@@ -19,6 +24,7 @@
     "@types/node": "20.14.10",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
+    "playwright": "^1.40.0",
     "typescript": "5.5.3"
   }
 }

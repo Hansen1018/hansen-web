@@ -1,7 +1,10 @@
-import { chromium } from 'playwright';
-import fs from 'fs';
+// scripts/verify-cyan-fixed.mjs
+// Computed-style verification for cyan-fix regressions. Exits 1 on FAIL.
 
-const URL = 'https://hansendong.top';
+import { chromium } from 'playwright';
+import fs from 'node:fs/promises';
+
+const URL = process.env.SITE_URL || 'https://hansendong.top';
 const OUT = '/workspace/hansen-web-next/screenshots/cyan-fixed';
 
 function relLum(rgb) {
@@ -15,8 +18,10 @@ function contrast(a, b) {
 }
 function parseRgb(s) { const m = s.match(/rgba?\(([^)]+)\)/); if (!m) return null; return m[1].split(',').slice(0,3).map(v => parseFloat(v.trim())); }
 
+let failures = 0;
+
 (async () => {
-  fs.mkdirSync(OUT, { recursive: true });
+  await fs.mkdir(OUT, { recursive: true });
   const browser = await chromium.launch();
   try {
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -71,7 +76,7 @@ function parseRgb(s) { const m = s.match(/rgba?\(([^)]+)\)/); if (!m) return nul
 
       console.log(`\n========== ${theme.toUpperCase()} MODE — POST-FIX ==========`);
       for (const [name, c] of Object.entries(checks)) {
-        if (!c.present) { console.log(`✗ ${name.padEnd(30)} NOT IN DOM`); continue; }
+        if (!c.present) { console.log(`✗ ${name.padEnd(30)} NOT IN DOM`); failures++; continue; }
         console.log(`✓ ${name}`);
         console.log(`    color:      ${c.color}`);
         console.log(`    weight:     ${c.weight}`);
@@ -82,8 +87,14 @@ function parseRgb(s) { const m = s.match(/rgba?\(([^)]+)\)/); if (!m) return nul
         const bg = parseRgb(c.bg);
         if (fg && bg) {
           const r = contrast(fg, bg);
-          const pass = r >= 4.5 ? '✓ AAA' : r >= 3 ? '⚠ AA-large' : '✗ FAIL (text color, but text-shadow boosts perceived contrast)';
-          console.log(`    contrast:   ${r.toFixed(2)}:1  ${pass}`);
+          if (r < 3) {
+            console.log(`    contrast:   ${r.toFixed(2)}:1  ✗ FAIL`);
+            failures++;
+          } else if (r < 4.5) {
+            console.log(`    contrast:   ${r.toFixed(2)}:1  ⚠ AA-large`);
+          } else {
+            console.log(`    contrast:   ${r.toFixed(2)}:1  ✓ AAA`);
+          }
         }
       }
     }
@@ -92,46 +103,38 @@ function parseRgb(s) { const m = s.match(/rgba?\(([^)]+)\)/); if (!m) return nul
     await page.evaluate(() => { localStorage.setItem('theme', 'light'); document.documentElement.setAttribute('data-theme', 'light'); });
     await page.waitForTimeout(300);
 
-    // 1) Skills section — "03 TOOLBOX Skill Stack" + Main Languages/Frontend/Scripts and Tools (the page user attached)
     await page.evaluate(() => document.getElementById('skills')?.scrollIntoView({ behavior: 'instant', block: 'start' }));
     await page.waitForTimeout(400);
     await page.screenshot({ path: `${OUT}/01-mobile-skills-light.png` });
-    // mobile viewport for same
     await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForTimeout(300);
     await page.screenshot({ path: `${OUT}/02-mobile-skills-light.png` });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.waitForTimeout(300);
 
-    // 2) Timeline section — cyan years
     await page.evaluate(() => document.getElementById('timeline')?.scrollIntoView({ behavior: 'instant', block: 'start' }));
     await page.waitForTimeout(400);
     await page.screenshot({ path: `${OUT}/03-desktop-timeline-light.png` });
 
-    // 3) Side-hustle — cyan status badges + CTA
     await page.evaluate(() => document.getElementById('side-hustle')?.scrollIntoView({ behavior: 'instant', block: 'start' }));
     await page.waitForTimeout(400);
     await page.screenshot({ path: `${OUT}/04-desktop-side-hustle-light.png` });
 
-    // 4) Contact — cyan eyebrow "07 · Get in touch"
     await page.evaluate(() => document.getElementById('contact')?.scrollIntoView({ behavior: 'instant', block: 'start' }));
     await page.waitForTimeout(400);
     await page.screenshot({ path: `${OUT}/05-desktop-contact-light.png` });
 
-    // 5) Blog — "view all →"
     await page.evaluate(() => document.getElementById('blog')?.scrollIntoView({ behavior: 'instant', block: 'start' }));
     await page.waitForTimeout(400);
     await page.screenshot({ path: `${OUT}/06-desktop-blog-light.png` });
 
-    // 6) SideNav active dot — light mode (hover/active section)
     await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
     await page.waitForTimeout(300);
-    const firstDot = await page.locator('.sidenav__btn').first();
+    const firstDot = page.locator('.sidenav__btn').first();
     await firstDot.hover();
     await page.waitForTimeout(400);
     await page.screenshot({ path: `${OUT}/07-desktop-sidenav-active-light.png` });
 
-    // 7) Dark mode regression — Skills section
     await page.evaluate(() => { localStorage.setItem('theme', 'dark'); document.documentElement.setAttribute('data-theme', 'dark'); });
     await page.waitForTimeout(300);
     await page.evaluate(() => document.getElementById('skills')?.scrollIntoView({ behavior: 'instant', block: 'start' }));
@@ -141,7 +144,13 @@ function parseRgb(s) { const m = s.match(/rgba?\(([^)]+)\)/); if (!m) return nul
     await page.waitForTimeout(300);
     await page.screenshot({ path: `${OUT}/09-mobile-skills-dark.png` });
 
-    console.log(`\n✅ ${fs.readdirSync(OUT).length} screenshots saved to ${OUT}`);
+    const files = await fs.readdir(OUT);
+    console.log(`\n✅ ${files.length} screenshots saved to ${OUT}`);
+
+    if (failures > 0) {
+      console.log(`\n✗ ${failures} contrast failure(s)`);
+      process.exitCode = 1;
+    }
   } finally {
     await browser.close();
   }

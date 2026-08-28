@@ -1,7 +1,9 @@
+// scripts/audit-cyan-light.mjs
+// Light-mode cyan-contrast audit. Exits 1 if any probe fails WCAG AA.
+
 import { chromium } from 'playwright';
 
-const URL = 'https://hansendong.top';
-const OUT = '/workspace/hansen-web-next/screenshots/cyan-audit';
+const URL = process.env.SITE_URL || 'https://hansendong.top';
 const browser = await chromium.launch();
 
 // WCAG luminance helpers
@@ -22,6 +24,9 @@ function parseRgb(s) {
   if (!m) return null;
   return m[1].split(',').slice(0, 3).map(v => parseFloat(v.trim()));
 }
+
+let failures = 0;
+const FAILURES = [];
 
 (async () => {
   try {
@@ -49,10 +54,11 @@ function parseRgb(s) {
       const probes = [
         ['.section__index', 'section__index (03 number)'],
         ['.timeline__year', 'timeline__year'],
-        ['.contact__link', 'contact__link'],
+        ['.contact__eyebrow', 'contact__eyebrow'],
         ['.blog-more', 'blog-more (view all link)'],
         ['.blog-loading a', 'blog-loading link'],
-        ['.hustle__price', 'hustle__price'],
+        ['.hustle__cta', 'hustle__cta'],
+        ['.hustle__status', 'hustle__status badge'],
         ['.sidenav__item.is-active .sidenav__dot', 'SideNav active dot (gradient endpoint)'],
         ['.aurora__blob--cyan', 'aurora blob cyan (decorative)'],
       ];
@@ -96,6 +102,8 @@ function parseRgb(s) {
     for (const r of report) {
       if (!r.present) {
         console.log(`✗ ${r.name.padEnd(40)} NOT IN DOM`);
+        failures++;
+        FAILURES.push(`${r.name}: selector ${r.sel} not in DOM`);
         continue;
       }
       console.log(`✓ ${r.name}`);
@@ -110,10 +118,28 @@ function parseRgb(s) {
       const bg = parseRgb(r.bg);
       if (fg && bg) {
         const c = contrast(fg, bg);
-        const pass = c >= 4.5 ? '✓ AAA' : c >= 3 ? '⚠ AA-large/UI' : '✗ FAIL';
-        console.log(`    contrast: ${c.toFixed(2)}:1  ${pass}`);
+        if (c < 3) {
+          const pass = '✗ FAIL';
+          console.log(`    contrast: ${c.toFixed(2)}:1  ${pass}`);
+          failures++;
+          FAILURES.push(`${r.name}: contrast ${c.toFixed(2)}:1 below 3:1 (FAIL)`);
+        } else if (c < 4.5) {
+          const pass = '⚠ AA-large/UI';
+          console.log(`    contrast: ${c.toFixed(2)}:1  ${pass}`);
+        } else {
+          const pass = '✓ AAA';
+          console.log(`    contrast: ${c.toFixed(2)}:1  ${pass}`);
+        }
       }
       console.log('');
+    }
+
+    if (failures > 0) {
+      console.log(`\n✗ ${failures} audit failure(s):`);
+      for (const f of FAILURES) console.log(`  - ${f}`);
+      process.exitCode = 1;
+    } else {
+      console.log('\n✓ All probes pass WCAG AA.');
     }
   } finally {
     await browser.close();

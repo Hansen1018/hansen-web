@@ -1,21 +1,32 @@
 #!/usr/bin/env bash
-# 部署到 VPS
-# 用法: ./deploy.sh user@host
+# Deploy hansen-web static export to VPS
+# Usage: ./deploy.sh user@host
 
-set -e
+set -euo pipefail
 
-HOST="${1:?用法: ./deploy.sh user@host}"
+HOST="${1:?usage: ./deploy.sh user@host}"
 REMOTE_DIR="/var/www/hansen-web"
 LOCAL_OUT="out"
+PUBLIC_URL="${PUBLIC_URL:-https://hansendong.top}"
 
-# 1. 本地构建
-echo "→ 构建中..."
+# Strip user@ from HOST for logging URLs
+HOSTNAME="${HOST##*@}"
+
+# 1. Local build
+echo "→ Building..."
 npm run build
 
-# 2. 上传 out/ 到服务器（先到临时目录再原子替换，避免读到不完整文件）
-echo "→ 上传到 $HOST..."
+# 2. Upload out/ to server (atomic via tmp dir, avoids serving half-written files)
+echo "→ Uploading to $HOST..."
 ssh "$HOST" "mkdir -p $REMOTE_DIR.tmp"
-rsync -avz --delete "$LOCAL_OUT/" "$HOST:$REMOTE_DIR.tmp/"
+rsync -a --delete "$LOCAL_OUT/" "$HOST:$REMOTE_DIR.tmp/"
 ssh "$HOST" "rm -rf $REMOTE_DIR && mv $REMOTE_DIR.tmp $REMOTE_DIR"
 
-echo "✓ 部署完成 → http://$HOST"
+# 3. Post-deploy healthcheck
+echo "→ Healthcheck..."
+if ! curl -fsSI --max-time 10 "$PUBLIC_URL/" >/dev/null; then
+  echo "✗ post-deploy healthcheck failed: $PUBLIC_URL did not return 2xx" >&2
+  exit 1
+fi
+
+echo "✓ Deploy complete → $PUBLIC_URL"

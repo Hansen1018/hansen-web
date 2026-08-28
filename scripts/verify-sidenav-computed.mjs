@@ -1,6 +1,9 @@
+// scripts/verify-sidenav-computed.mjs
+// Dump computed colors for SideNav + section labels. Pure observability, no pass/fail.
+
 import { chromium } from 'playwright';
 
-const URL = 'https://hansendong.top';
+const URL = process.env.SITE_URL || 'https://hansendong.top';
 const browser = await chromium.launch();
 try {
   for (const [label, vp] of [['mobile', { width: 390, height: 844, dsf: 2 }], ['desktop', { width: 1440, height: 900, dsf: 1 }]]) {

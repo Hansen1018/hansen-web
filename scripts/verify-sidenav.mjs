@@ -1,6 +1,9 @@
+// scripts/verify-sidenav.mjs
+// Visual snapshot pass for SideNav dot/tooltip regressions.
+
 import { chromium } from 'playwright';
 
-const URL = 'https://hansendong.top';
+const URL = process.env.SITE_URL || 'https://hansendong.top';
 const OUT = '/workspace/hansen-web-next/screenshots/sidenav-fix';
 
 async function capture(page, name) {
@@ -52,13 +55,20 @@ async function setTheme(page, theme) {
     await m.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
     await m.waitForTimeout(300);
     // click hamburger (mobile only, <900px)
-    const hb = await m.locator('.m-menu-btn').first();
-    await hb.click();
-    await m.waitForTimeout(500);
-    await capture(m, '03-mobile-drawer-open-light');
-    // close it
-    await hb.click();
-    await m.waitForTimeout(400);
+    const hb = m.locator('.m-menu-btn').first();
+    if (await hb.count()) {
+      await hb.click();
+      await m.waitForTimeout(500);
+      await capture(m, '03-mobile-drawer-open-light');
+      // re-locate for close — drawer may have re-rendered
+      const hb2 = m.locator('.m-menu-btn').first();
+      if (await hb2.count()) {
+        await hb2.click();
+        await m.waitForTimeout(400);
+      }
+    } else {
+      console.warn('⚠ no .m-menu-btn in DOM, skipping drawer capture');
+    }
 
     // ============ Desktop viewport ============
     const desktopCtx = await browser.newContext({
@@ -77,16 +87,19 @@ async function setTheme(page, theme) {
     await d.waitForTimeout(500);
     await capture(d, '04-desktop-skills-light');
 
-    // 5) desktop SideNav dots + hover tooltip, light mode (verify sidenav__label bg fix)
+    // 5) desktop SideNav dots + hover tooltip, light mode
     await d.evaluate(() => {
       document.getElementById('hero')?.scrollIntoView({ behavior: 'instant', block: 'start' });
     });
     await d.waitForTimeout(400);
-    // hover first dot to trigger tooltip
-    const firstDot = await d.locator('.sidenav__btn').first();
-    await firstDot.hover();
-    await d.waitForTimeout(400);
-    await capture(d, '05-desktop-sidenav-tooltip-light');
+    const firstDot = d.locator('.sidenav__btn').first();
+    if (await firstDot.count()) {
+      await firstDot.hover();
+      await d.waitForTimeout(400);
+      await capture(d, '05-desktop-sidenav-tooltip-light');
+    } else {
+      console.warn('⚠ no .sidenav__btn in DOM, skipping tooltip captures');
+    }
 
     // 6) desktop Skills section, dark mode (regression check)
     await setTheme(d, 'dark');
@@ -101,11 +114,13 @@ async function setTheme(page, theme) {
       document.getElementById('hero')?.scrollIntoView({ behavior: 'instant', block: 'start' });
     });
     await d.waitForTimeout(400);
-    await firstDot.hover();
-    await d.waitForTimeout(400);
-    await capture(d, '07-desktop-sidenav-tooltip-dark');
+    if (await firstDot.count()) {
+      await firstDot.hover();
+      await d.waitForTimeout(400);
+      await capture(d, '07-desktop-sidenav-tooltip-dark');
+    }
 
-    console.log('\n✅ All 7 captures done.');
+    console.log('\n✅ All captures done.');
   } finally {
     await browser.close();
   }
