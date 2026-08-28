@@ -1,6 +1,10 @@
 import { profile } from '@/data/profile'
 import { socialIconPaths } from './socialIcons'
-import nextPkg from 'next/package.json'
+
+// Hardcoded instead of `import nextPkg from 'next/package.json'` — keeps the
+// build off bundler internals (which can shift between Next minor versions) and
+// matches the package.json version directly. Keep in sync on upgrade.
+const NEXT_VERSION = '16.3.1'
 
 export default function ContactSection() {
   return (
@@ -27,6 +31,7 @@ export default function ContactSection() {
               height="18"
               viewBox="0 0 24 24"
               fill="none"
+              aria-hidden="true"
             >
               <path
                 d="M5 12h14M13 6l6 6-6 6"
@@ -49,7 +54,7 @@ export default function ContactSection() {
                     className="social"
                     title={s.label}
                   >
-                    <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" aria-hidden="true">
                       <path
                         d={
                           socialIconPaths[s.icon as keyof typeof socialIconPaths] ||
@@ -68,8 +73,8 @@ export default function ContactSection() {
 
       <footer className="legal">
         <span>© {new Date().getFullYear()} {profile.name}.</span>
-        <span className="legal__sep">·</span>
-        <span>Built with Next.js {nextPkg.version}</span>
+        <span className="legal__sep" aria-hidden="true">·</span>
+        <span>Built with Next.js {NEXT_VERSION}</span>
       </footer>
     </section>
   )

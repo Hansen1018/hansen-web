@@ -1,11 +1,6 @@
 import SectionShell from './SectionShell'
 import { profile } from '@/data/profile'
-
-function hashHue(str: string): number {
-  let h = 0
-  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0
-  return Math.abs(h) % 360
-}
+import { hashHue } from '@/lib/hash'
 
 export default function SkillsSection() {
   const isEmpty =
@@ -20,7 +15,7 @@ export default function SkillsSection() {
     <SectionShell id="skills" index="03" eyebrow="Toolbox" title="技能栈">
       {isEmpty ? (
         <div className="empty">
-          暂无数据。请到 <code>src/data/profile.ts</code> 的 <code>skills</code> 数组添加。
+          暂无数据。请到 <code>src/data/profile/skills.ts</code> 的 <code>skills</code> 数组添加。
         </div>
       ) : (
         <div className="skills">
@@ -32,7 +27,7 @@ export default function SkillsSection() {
                   <li
                     key={item.name}
                     className="chip"
-                    style={{ ['--hue' as string]: item.hue } as React.CSSProperties}
+                    style={{ '--hue': item.hue } as React.CSSProperties}
                   >
                     {item.name}
                   </li>

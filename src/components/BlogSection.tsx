@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import SectionShell from './SectionShell'
 import { profile } from '@/data/profile'
 
@@ -16,18 +16,26 @@ interface BlogPost {
 const blogCfg = profile.blog  // profile.blog is always defined (BlogConfig required field)
 
 /**
- * BlogSection — client-side fetches latest articles from https://blog.hansendong.top/index.json.
- * 1:1 port of Vue version's fetch + loading/error/empty-state fallback.
- * AbortController prevents setState after unmount from triggering React warnings.
+ * BlogSection — client-side fetches latest articles from the configured feed URL.
+ * - Single in-flight AbortController ref prevents overlapping fetches from racing
+ *   (visibilitychange + setInterval would otherwise cancel each other via the
+ *   outer effect's AbortController, but the newer one wins).
+ * - Loading/error/empty states are wrapped in role="status" aria-live="polite"
+ *   so screen readers announce the transition.
  */
 export default function BlogSection() {
   const [posts, setPosts] = useState<BlogPost[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const inFlightRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
-    const ctrl = new AbortController()
     async function load() {
+      // Cancel any in-flight request before starting a new one.
+      inFlightRef.current?.abort()
+      const ctrl = new AbortController()
+      inFlightRef.current = ctrl
+
       try {
         const res = await fetch(`${blogCfg.feed}?v=${Date.now()}`, {
           cache: 'no-store',
@@ -57,13 +65,13 @@ export default function BlogSection() {
     }
     document.addEventListener('visibilitychange', onVisibility)
     return () => {
-      ctrl.abort()
+      inFlightRef.current?.abort()
       clearInterval(interval)
       document.removeEventListener('visibilitychange', onVisibility)
     }
   }, [])
 
-  // Chinese long format: 2026-08-16 → Aug 16, 2026
+  // Chinese long format: 2026-08-16 → 2026年8月16日
   const formatDate = (d: string) => {
     const dt = new Date(d)
     if (isNaN(dt.getTime())) return d
@@ -72,13 +80,16 @@ export default function BlogSection() {
 
   return (
     <SectionShell id="blog" index="04" eyebrow="Latest" title="Blog">
+      <p role="status" aria-live="polite" className="sr-only">
+        {loading ? '正在加载最新文章' : error ? '加载失败' : posts.length > 0 ? `已加载 ${posts.length} 篇文章` : '暂无文章'}
+      </p>
       {loading ? (
         <div className="blog-grid">
           <p className="blog-loading">加载中…</p>
         </div>
       ) : error ? (
         <div className="blog-grid">
-          <p className="blog-loading">博客最新文章暂时无法索取，等会再试。({error})</p>
+          <p className="blog-loading">博客最新文章暂时无法索取，等会再试。</p>
         </div>
       ) : posts.length === 0 ? (
         <div className="blog-grid">
@@ -92,8 +103,8 @@ export default function BlogSection() {
         </div>
       ) : (
         <div className="blog-grid">
-          {posts.map((p) => (
-            <article key={p.url} className="blog-card">
+          {posts.map((p, i) => (
+            <article key={`${p.url}#${i}`} className="blog-card">
               <div className="blog-card__meta">{formatDate(p.date)}</div>
               <h3 className="blog-card__title">
                 <a

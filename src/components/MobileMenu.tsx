@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { navSections } from '@/data/profile'
 
 interface MobileMenuProps {
@@ -10,19 +10,40 @@ interface MobileMenuProps {
 
 /**
  * MobileMenu — mobile hamburger menu + drawer + backdrop.
- * Uses CSS class toggling instead of Vue's <Transition>, with matching effects.
- * body scroll lock: overflow:hidden when open, restored on close/unmount.
+ * Body scroll lock uses overflow:hidden when open, restored to its prior value on
+ * close/unmount (preserves any other component's scroll lock).
+ * Focus moves to the first drawer link on open and back to the trigger on close.
  */
 export default function MobileMenu({ active, onJump }: MobileMenuProps) {
   const [open, setOpen] = useState(false)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const drawerRef = useRef<HTMLElement>(null)
+  const prevOverflowRef = useRef<string>('')
+
+  // Snapshot the initial body.overflow on mount so we never clobber it.
+  useEffect(() => {
+    prevOverflowRef.current = document.body.style.overflow
+    return () => {
+      document.body.style.overflow = prevOverflowRef.current
+    }
+  }, [])
 
   const openMenu = () => {
+    if (open) return
     setOpen(true)
     document.body.style.overflow = 'hidden'
+    // Move focus to the first drawer link after the drawer renders.
+    requestAnimationFrame(() => {
+      const firstLink = drawerRef.current?.querySelector<HTMLButtonElement>('.m-menu-link')
+      firstLink?.focus()
+    })
   }
   const closeMenu = () => {
+    if (!open) return
     setOpen(false)
-    document.body.style.overflow = ''
+    document.body.style.overflow = prevOverflowRef.current
+    // Restore focus to the trigger button so keyboard users don't lose their place.
+    requestAnimationFrame(() => triggerRef.current?.focus())
   }
   const toggle = () => (open ? closeMenu() : openMenu())
   const jump = (id: string) => {
@@ -37,7 +58,6 @@ export default function MobileMenu({ active, onJump }: MobileMenuProps) {
     window.addEventListener('keydown', onKey)
     return () => {
       window.removeEventListener('keydown', onKey)
-      document.body.style.overflow = ''
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
@@ -45,6 +65,7 @@ export default function MobileMenu({ active, onJump }: MobileMenuProps) {
   return (
     <>
       <button
+        ref={triggerRef}
         type="button"
         className="m-menu-btn"
         aria-expanded={open}
@@ -66,6 +87,7 @@ export default function MobileMenu({ active, onJump }: MobileMenuProps) {
       ></div>
 
       <nav
+        ref={drawerRef}
         id="mobile-menu-drawer"
         className={`m-menu-drawer${open ? ' is-open' : ''}`}
         aria-label="主导航"

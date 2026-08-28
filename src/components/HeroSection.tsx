@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { profile } from '@/data/profile'
 import { socialIconPaths, getSocialHandle } from './socialIcons'
 
@@ -9,12 +9,22 @@ const DELETE_SPEED = 60
 const PAUSE_FULL = 1600
 const PAUSE_EMPTY = 350
 
+// Derived once at module load — profile.socials is static, no need to re-derive per render.
+const HERO_SOCIALS = profile.socials.map((s) => ({
+  ...s,
+  handle: getSocialHandle(s.url, s.label),
+}))
+
+// Avatar dimensions match GitHub avatar size used in profile.avatar (?s=460).
+const AVATAR_SIZE = 460
+
 /**
  * HeroSection — first screen: avatar / social / status chips / typewriter name / CTA / scroll indicator.
  * Typewriter loops profile.name, controlled by type/delete state machine.
  */
 export default function HeroSection() {
   const [typed, setTyped] = useState('')
+  const [imgErr, setImgErr] = useState(false)
   const word = profile.name
 
   useEffect(() => {
@@ -55,38 +65,40 @@ export default function HeroSection() {
     }
   }, [word])
 
-  const socials = useMemo(
-    () => profile.socials.map((s) => ({ ...s, handle: getSocialHandle(s.url, s.label) })),
-    [],
-  )
-
   return (
     <section id="hero" className="hero">
       <div className="hero__inner">
         <div className="hero__avatar fade-up" style={{ animationDelay: '.05s' }}>
           <div className="hero__avatar-ring"></div>
-          {profile.avatar ? (
+          {profile.avatar && !imgErr ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={profile.avatar}
               alt={`${profile.name} avatar`}
               className="hero__avatar-img"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none'
-              }}
+              width={AVATAR_SIZE}
+              height={AVATAR_SIZE}
+              decoding="async"
+              fetchPriority="high"
+              onError={() => setImgErr(true)}
             />
           ) : (
             <div className="hero__avatar-core">
               <span>{profile.initials}</span>
             </div>
           )}
-          <span className="hero__status" title={profile.availability}>
-            <span className="hero__status-dot"></span>
+          <span
+            className="hero__status"
+            role="status"
+            aria-label={profile.availability}
+            title={profile.availability}
+          >
+            <span className="hero__status-dot" aria-hidden="true"></span>
           </span>
         </div>
 
         <div className="hero__socials fade-up" style={{ animationDelay: '.1s' }}>
-          {socials.map((s) => (
+          {HERO_SOCIALS.map((s) => (
             <a
               key={s.label}
               href={s.url}
@@ -108,15 +120,15 @@ export default function HeroSection() {
 
         <div className="hero__chips fade-up" style={{ animationDelay: '.15s' }}>
           <span className="chip">
-            <span className="chip__dot chip__dot--green"></span>
+            <span className="chip__dot chip__dot--green" aria-hidden="true"></span>
             {profile.status}
           </span>
           <span className="chip">
-            <span className="chip__dot chip__dot--cyan"></span>
+            <span className="chip__dot chip__dot--cyan" aria-hidden="true"></span>
             {profile.location}
           </span>
           <span className="chip">
-            <span className="chip__dot chip__dot--violet"></span>
+            <span className="chip__dot chip__dot--violet" aria-hidden="true"></span>
             {profile.availability}
           </span>
         </div>
@@ -141,7 +153,7 @@ export default function HeroSection() {
         <div className="hero__cta fade-up" style={{ animationDelay: '.46s' }}>
           <a href="#projects" className="btn btn--primary">
             查看作品
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path
                 d="M5 12h14M13 6l6 6-6 6"
                 stroke="currentColor"
@@ -154,7 +166,7 @@ export default function HeroSection() {
           <a
             href="https://blog.hansendong.top/about"
             target="_blank"
-            rel="noopener"
+            rel="noopener noreferrer"
             className="btn btn--ghost"
           >
             联系我
@@ -163,7 +175,7 @@ export default function HeroSection() {
       </div>
 
       <a href="#about" className="hero__scroll" aria-label="向下滚动">
-        <span className="hero__scroll-line"></span>
+        <span className="hero__scroll-line" aria-hidden="true"></span>
       </a>
     </section>
   )

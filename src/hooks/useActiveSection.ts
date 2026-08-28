@@ -5,23 +5,27 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 /**
  * Scroll-spy: tracks the active state of a set of sections.
  *
- * Algorithm (top-based, 1:1 ported from Vue version composables/useActiveSection.js):
+ * Algorithm (top-based):
  *   1. Pick the section where "rect.top <= triggerY(0.3*innerHeight) && rect.top is the largest"
  *   2. Last-section fallback: force-pick the last section when it's fully in viewport
- *   3. Top fallback
+ *   3. Top fallback: nearest below the trigger line
  *
  * Instant lock (on scrollTo):
- *   During smooth-scroll animation, the IO algorithm picks the wrong section by ratio.
+ *   During smooth-scroll animation, the algorithm picks the wrong section by ratio.
  *   On scrollTo, immediately lock active to the target id; don't recompute during scroll;
- *   Unlock via scrollend event (browser-native), with a 3000ms fallback when scrollend isn't supported.
+ *   Unlock via the native `scrollend` event (Chromium 114+, Firefox 109+).
+ *   When scrollend isn't supported, fall back to a 3s timer.
  *
  * @param ids list of section ids (for DOM lookup)
  * @returns { active, scrollTo }
  */
+const hasNativeScrollEnd = typeof window !== 'undefined' && 'onscrollend' in window
+
 export function useActiveSection(ids: readonly string[]) {
   const [active, setActive] = useState<string>(ids[0] ?? '')
   const lockedIdRef = useRef<string | null>(null)
   const unlockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const onScrollEndRef = useRef<(() => void) | null>(null)
 
   const pickActive = useCallback(() => {
     if (lockedIdRef.current) return
@@ -85,17 +89,29 @@ export function useActiveSection(ids: readonly string[]) {
 
       el.scrollIntoView({ behavior: 'smooth', block: 'start' })
 
+      // Rapid double-click: drop the previous scrollend listener before registering a new one.
+      if (onScrollEndRef.current) {
+        window.removeEventListener('scrollend', onScrollEndRef.current)
+        onScrollEndRef.current = null
+      }
+
       const onScrollEnd = () => {
         window.removeEventListener('scrollend', onScrollEnd)
+        onScrollEndRef.current = null
         unlock()
       }
+      onScrollEndRef.current = onScrollEnd
       window.addEventListener('scrollend', onScrollEnd, { once: true })
 
       if (unlockTimerRef.current) clearTimeout(unlockTimerRef.current)
-      unlockTimerRef.current = setTimeout(() => {
-        window.removeEventListener('scrollend', onScrollEnd)
-        unlock()
-      }, 3000)
+      // Fallback timer only when scrollend isn't natively supported.
+      if (!hasNativeScrollEnd) {
+        unlockTimerRef.current = setTimeout(() => {
+          window.removeEventListener('scrollend', onScrollEnd)
+          onScrollEndRef.current = null
+          unlock()
+        }, 3000)
+      }
     },
     [unlock],
   )
@@ -111,6 +127,10 @@ export function useActiveSection(ids: readonly string[]) {
     return () => {
       window.removeEventListener('scroll', onScroll)
       window.removeEventListener('resize', pickActive)
+      if (onScrollEndRef.current) {
+        window.removeEventListener('scrollend', onScrollEndRef.current)
+        onScrollEndRef.current = null
+      }
       if (unlockTimerRef.current) clearTimeout(unlockTimerRef.current)
     }
   }, [pickActive])
