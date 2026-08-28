@@ -17,20 +17,23 @@ export const profileProjects: Project[] = [
     repo:     'https://github.com/Hansen1018/hugo-theme-lumenveil',
     logo:     'https://raw.githubusercontent.com/Hansen1018/hugo-theme-lumenveil/main/docs/screenshots/home-219.png',
     logoFit:  'cover',
-    homepage: 'https://blog.hansendong.top/',
     year:     2026,
-    featured: true
+    featured: true,
   },
   {
-    title:    'hansen-web',
-    desc:     '你正在浏览的网站。Vue 3 + Vite SSG，Glassmorphism 设计，完整 SEO 与 AI agents 优化。',
+    // Legacy entry — hansen-web (Vue 3 + Vite SSG) was the previous incarnation
+    // of this personal site before the 2026 Next.js migration. The currently
+    // deployed version (https://hansendong.top) is the Next.js app in this repo
+    // (hansen-web-next), NOT this Vue codebase.
+    title:    'hansen-web (legacy Vue)',
+    desc:     '本站的前一版实现。Vue 3 + Vite SSG，Glassmorphism 设计，完整 SEO 与 AI agents 优化。当前线上版本已迁移至 Next.js（hansen-web-next，仓库根目录）。',
     tags:     ['Vue', 'Vite SSG', 'CSS', 'MIT'],
     link:     'https://github.com/Hansen1018/hansen-web',
     repo:     'https://github.com/Hansen1018/hansen-web',
     logo:     'https://raw.githubusercontent.com/Hansen1018/hansen-web/main/public/og.png',
     logoFit:  'cover',
     year:     2026,
-    featured: true
+    featured: false,
   },
   {
     title:    'nofx',
@@ -41,6 +44,6 @@ export const profileProjects: Project[] = [
     logo:     'https://raw.githubusercontent.com/Hansen1018/nofx/Individual/screenshots/dashboard-page.png',
     logoFit:  'cover',
     year:     2026,
-    featured: false
-  }
+    featured: false,
+  },
 ]

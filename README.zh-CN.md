@@ -27,7 +27,7 @@
 ## 功能特性
 
 - **Next.js App Router** + `output: 'export'` —— 纯静态站点，零运行时成本
-- **React** 默认走服务端组件；13 个组件里只有 5 个需要打包客户端 JS
+- **React** 默认走服务端组件；14 个组件里只有 7 个需要打包客户端 JS
 - **TypeScript strict** —— 数据、Hook、组件全程类型安全
 - **玻璃拟态 + 极光背景** —— 三团漂浮的径向光晕 + 颗粒噪点叠加 + `backdrop-filter` 玻璃卡片
 - **滚动监听** —— 单一 `IntersectionObserver` 同时驱动桌面 `SideNav` 和移动端 `MobileMenu`（`NavController` 封装）
@@ -68,13 +68,16 @@ prebuild
 ```
 hansen-web-next/
 ├── package.json
-├── next.config.mjs        # output: 'export' + images.unoptimized
+├── next.config.mjs        # output: 'export' + images.unoptimized + CSP/XFO headers
 ├── tsconfig.json          # strict 模式，@/* 路径别名
-├── deploy.sh              # 原子替换 + rsync
+├── deploy.sh              # 原子替换 + rsync + post-deploy 健康检查
 ├── public/                # favicon、og.svg（构建后产物）
+├── screenshots/           # README 预览图（桌面 / 移动）
 ├── scripts/
-│   └── gen-og.mjs         # SVG → PNG
-├── screenshots/           # README 截图（desktop / mobile）
+│   ├── gen-og.mjs         # SVG → PNG
+│   ├── capture-previews.mjs
+│   ├── audit-cyan-light.mjs   # WCAG 青色对比度审计
+│   └── verify-*.mjs       # 侧导航 + computed style 校验
 └── src/
     ├── app/
     │   ├── layout.tsx     # metadata + JSON-LD
@@ -94,6 +97,7 @@ hansen-web-next/
     │   ├── TimelineSection.tsx     # server —— 纯展示
     │   ├── SideHustleSection.tsx   # server —— 纯展示
     │   ├── ContactSection.tsx      # server —— 纯展示
+    │   ├── ThemeToggle.tsx         # client —— data-theme + localStorage 同步
     │   └── socialIcons.ts          # 共享 SVG path
     ├── data/
     │   └── profile/                # 全部内容，按 section 拆分的文件
@@ -146,8 +150,9 @@ App Router 默认使用 React Server Components。这个站点只在真正需要
 | `SideNav` | Server | 纯展示，接收 props |
 | `MobileMenu` | Client | 开关状态 + body 滚动锁 |
 | `NavController` | Client | 给 SideNav + MobileMenu 提供 scroll-spy |
+| `ThemeToggle` | Client | data-theme + localStorage 同步，mount 前禁用 |
 
-8 个 section 组件里 7 个是纯 HTML。交互层（scroll-spy、打字机、移动端抽屉、博客 fetch）是唯一的客户端 JS。
+8 个 section 组件里 5 个是纯 HTML。交互层（scroll-spy、打字机、移动端抽屉、博客 fetch）是唯一的客户端 JS。
 
 ### Scroll-spy
 
@@ -161,7 +166,9 @@ App Router 默认使用 React Server Components。这个站点只在真正需要
 
 ### 样式
 
-所有样式统一在 `src/styles/components.css`（约 1100 行）。类名遵循 BEM（`block__element--modifier`）。不用 CSS Modules、不用 styled-components —— 直接用全局 CSS，因为 Next.js 只编译一次，而且类名已经足够命名空间化。
+样式拆分在 `src/styles/` 下 14 个 per-section 文件，每个在 `src/app/layout.tsx` 中独立导入。类名遵循 BEM（`block__element--modifier`）。不用 CSS Modules、不用 styled-components —— 直接用全局 CSS，因为 Next.js 只编译一次，而且类名已经足够命名空间化。
+
+为什么独立导入而非用 `@import` 聚合：Next.js 16 的默认打包器（Turbopack）不解析 CSS `@import` 语句，所以一个聚合文件加 `@import` 在生产环境会变成空内容。独立导入既绕开这个问题，也保留了每个文件的所有权。
 
 Vue 版本用了 `<style scoped>`，会给选择器追加 `[data-v-xxx]` 属性来提特异性。Next.js 全局 CSS 里用双选择器模式（`.card--feature .card__thumb-logo--cover, .card__thumb-logo--cover`）来还原 Vue data 属性提供的特异性增益。
 
@@ -172,9 +179,10 @@ Vue 版本用了 `<style scoped>`，会给选择器追加 `[data-v-xxx]` 属性�
 # 对已存在的 target 跑 `mv tmp target` 会创建出 target/tmp/）
 rm -rf /var/www/hansen-web.tmp
 mkdir -p /var/www/hansen-web.tmp
-rsync -avz --delete out/ /var/www/hansen-web.tmp/
+rsync -a --delete out/ /var/www/hansen-web.tmp/
 rm -rf /var/www/hansen-web
 mv /var/www/hansen-web.tmp /var/www/hansen-web
+curl -fsSI https://hansendong.top/   # post-deploy 健康检查
 ```
 
 `deploy.sh` 封装了上面这套流程。缓存：CSS / JS chunk 文件名带 hash，是 immutable 的；HTML 走每小时重新校验。Cloudflare（NPM）挡在前面。
@@ -197,4 +205,4 @@ mv /var/www/hansen-web.tmp /var/www/hansen-web
 
 ## License
 
-MIT
+MIT —— 见 [LICENSE](./LICENSE)。

@@ -17,6 +17,13 @@
  * ============================================================
  */
 
+import { profileAbout } from './about'
+import { profileProjects } from './projects'
+import { profileSkills } from './skills'
+import { profileSideHustles } from './side-hustles'
+import { profileBlog } from './blog'
+import { profileTimeline } from './timeline'
+
 // ============================================================
 //  Interfaces
 // ============================================================
@@ -40,7 +47,6 @@ export interface Project {
   repo: string
   logo?: string
   logoFit?: 'cover' | 'contain'
-  homepage?: string
   year: number
   featured: boolean
 }
@@ -115,22 +121,15 @@ const profileIdentity = {
   socials: [
     { label: 'GitHub',   url: 'https://github.com/Hansen1018',        icon: 'github' },
     { label: 'X',        url: 'https://x.com/Hansen1018',            icon: 'twitter' },
-    { label: 'Telegram', url: 'https://t.me/Hansen1018',              icon: 'link' },
+    { label: 'Telegram', url: 'https://t.me/Hansen1018',              icon: 'telegram' },
     { label: 'Email',    url: 'mailto:hansendong1018@gmail.com',      icon: 'email' },
-    { label: 'Blog',     url: 'https://blog.hansendong.top/',          icon: 'blog' }
-  ] as SocialLink[]
+    { label: 'Blog',     url: 'https://blog.hansendong.top/',          icon: 'blog' },
+  ],
 }
 
 // ============================================================
 //  Aggregator — assemble the final `profile`
 // ============================================================
-
-import { profileAbout } from './about'
-import { profileProjects } from './projects'
-import { profileSkills } from './skills'
-import { profileSideHustles } from './side-hustles'
-import { profileBlog } from './blog'
-import { profileTimeline } from './timeline'
 
 export const profile: Profile = {
   ...profileIdentity,
@@ -139,7 +138,7 @@ export const profile: Profile = {
   skills:      profileSkills,
   sideHustles: profileSideHustles,
   blog:        profileBlog,
-  timeline:    profileTimeline
+  timeline:    profileTimeline,
 }
 
 // ============================================================
@@ -154,7 +153,7 @@ export const navSections = [
   { id: 'blog',     label: '博客' },
   { id: 'timeline', label: '经历' },
   { id: 'side',     label: '副业' },
-  { id: 'contact',  label: '联系' }
+  { id: 'contact',  label: '联系' },
 ] as const
 
 export type NavSectionId = typeof navSections[number]['id']

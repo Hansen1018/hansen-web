@@ -27,7 +27,7 @@ Mobile menu drawer:
 ## Features
 
 - **Next.js App Router** with `output: 'export'` — pure static site, zero runtime cost
-- **React** server components by default; only 5 of 13 components ship client JS
+- **React** server components by default; only 7 of 14 components ship client JS
 - **TypeScript strict** — full type safety on data, hooks, components
 - **Glassmorphism + aurora background** — three drifting radial blobs, grain noise overlay, glass cards with `backdrop-filter`
 - **Scroll-spy** — single `IntersectionObserver` powers both `SideNav` (desktop) and `MobileMenu` (mobile) via `NavController`
@@ -56,7 +56,7 @@ npm run dev        # http://localhost:5173
 npm run build      # outputs to out/
 ```
 
-`npm run build` runs two prebuild steps first:
+`npm run build` runs one prebuild step first:
 
 ```
 prebuild
@@ -68,13 +68,16 @@ prebuild
 ```
 hansen-web-next/
 ├── package.json
-├── next.config.mjs        # output: 'export' + images.unoptimized
+├── next.config.mjs        # output: 'export' + images.unoptimized + CSP/XFO headers
 ├── tsconfig.json          # strict mode, @/* path alias
-├── deploy.sh              # atomic replace + rsync
+├── deploy.sh              # atomic replace + rsync + post-deploy healthcheck
 ├── public/                # favicon, og.svg (post-build)
+├── screenshots/           # README preview images (desktop / mobile)
 ├── scripts/
 │   ├── gen-og.mjs         # SVG → PNG
-│   └── capture-previews.mjs
+│   ├── capture-previews.mjs
+│   ├── audit-cyan-light.mjs   # WCAG cyan-contrast audit
+│   └── verify-*.mjs       # sidenav + computed-style verification
 └── src/
     ├── app/
     │   ├── layout.tsx     # metadata + JSON-LD
@@ -94,6 +97,7 @@ hansen-web-next/
     │   ├── TimelineSection.tsx     # server — presentational
     │   ├── SideHustleSection.tsx   # server — presentational
     │   ├── ContactSection.tsx      # server — presentational
+    │   ├── ThemeToggle.tsx         # client — data-theme + localStorage
     │   └── socialIcons.ts          # shared SVG paths
     ├── data/
     │   └── profile/                # all content, split into per-section files
@@ -146,8 +150,9 @@ App Router uses React Server Components by default. The site is interactive only
 | `SideNav` | Server | Presentational, receives props |
 | `MobileMenu` | Client | Open/close state, body scroll lock |
 | `NavController` | Client | Wraps scroll-spy for SideNav + MobileMenu |
+| `ThemeToggle` | Client | data-theme + localStorage sync, mount-aware disable |
 
-Seven of the eight section components ship as pure HTML. The interactivity layer (scroll-spy, typewriter, mobile drawer, blog fetch) is the only client JS.
+Five of the eight section components ship as pure HTML. The interactivity layer (scroll-spy, typewriter, mobile drawer, blog fetch) is the only client JS.
 
 ### Scroll-spy
 
@@ -174,9 +179,10 @@ Vue version used `<style scoped>` which appended `[data-v-xxx]` attributes for s
 # mv tmp target on existing target creates target/tmp/)
 rm -rf /var/www/hansen-web.tmp
 mkdir -p /var/www/hansen-web.tmp
-rsync -avz --delete out/ /var/www/hansen-web.tmp/
+rsync -a --delete out/ /var/www/hansen-web.tmp/
 rm -rf /var/www/hansen-web
 mv /var/www/hansen-web.tmp /var/www/hansen-web
+curl -fsSI https://hansendong.top/   # post-deploy healthcheck
 ```
 
 `deploy.sh` wraps this. Caching: CSS and JS chunks are immutable (hashed filenames); HTML revalidates hourly. Cloudflare sits in front via NPM.
@@ -199,4 +205,4 @@ Page-specific additions: hero typewriter (`HeroSection`) + scroll-spy (`useActiv
 
 ## License
 
-MIT
+MIT — see [LICENSE](./LICENSE).
