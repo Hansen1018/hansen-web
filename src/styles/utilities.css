@@ -1,7 +1,9 @@
-/* —— Utilities —— — also: Fade-up animation (used by hero__inner), Page wrapper */
+/* —— Utilities —— — Page wrapper + canonical fade-up animation. The duplicate
+   .fade-up in globals.css was removed in batch 3; this version is the canonical
+   one (used by all .fade-up consumers in the hero / section shells). */
 
 
-/* —— Fade-up animation (used by hero__inner) —— */
+/* —— Canonical fade-up animation (used by hero__inner + per-section fade-up hooks) —— */
 .fade-up {
   opacity: 0;
   transform: translateY(8px);

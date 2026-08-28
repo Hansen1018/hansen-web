@@ -22,7 +22,7 @@
 /* Light mode: empty state code uses pure white bg + dark border on light bg */
 [data-theme="light"] .empty code {
   background: var(--bg-1);
-  border: 1px solid rgba(8, 12, 24, 0.18);
+  border: 1px solid var(--line-stronger);
 }
 
 .grid {
@@ -142,12 +142,16 @@
   color: var(--ink-3);
 }
 
+.card__year {
+  /* displayed inline next to .card__badge in the meta row */
+}
+
 .card__badge {
   padding: 2px 8px;
   border-radius: 999px;
   background: var(--accent-grad-soft);
   border: 1px solid rgba(124, 92, 255, 0.3);
-  color: #c4b5fd;
+  color: var(--accent-1-soft);
   font-size: 10px;
 }
 
@@ -191,7 +195,7 @@
 /* Light mode override: card-internal tag uses pure white + dark border on light bg */
 [data-theme="light"] .card__tag {
   background: var(--bg-1);
-  border-color: rgba(8, 12, 24, 0.18);
+  border-color: var(--line-stronger);
 }
 
 .card__arrow {
@@ -205,6 +209,7 @@
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.3);
   color: #fff;
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   opacity: 0;
   transform: translate(-4px, 4px);

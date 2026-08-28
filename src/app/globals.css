@@ -19,7 +19,9 @@
     0 12px 24px -10px rgba(0, 0, 0, 0.4);
 
   --accent-1: #7c5cff;
+  --accent-1-soft: #c4b5fd;
   --accent-2: #22d3ee;
+  --accent-2-glow: rgba(34, 211, 238, 0.4);
   --accent-3: #f472b6;
   --accent-grad: linear-gradient(135deg, #7c5cff 0%, #22d3ee 100%);
   --accent-grad-soft: linear-gradient(
@@ -27,6 +29,10 @@
     rgba(124, 92, 255, 0.18) 0%,
     rgba(34, 211, 238, 0.18) 100%
   );
+
+  /* Semantic accent for availability / success states (status dot, "open to work" badge). */
+  --accent-success: #22c55e;
+  --accent-success-glow: rgba(34, 197, 94, 0.5);
 
   /* —— Typography —— */
   --font-sans:
@@ -51,6 +57,10 @@
   --ink-4: rgba(8, 12, 24, 0.28);
   --line: rgba(8, 12, 24, 0.08);
   --line-strong: rgba(8, 12, 24, 0.16);
+  /* Slightly stronger than --line-strong — used for card outlines that need to
+     stand out on a textured light background (--glass-bg + radial overlay). */
+  --line-stronger: rgba(8, 12, 24, 0.18);
+  --accent-1-soft: var(--accent-1);
   --glass-bg: rgba(255, 255, 255, 0.72);
   --glass-bg-hover: rgba(255, 255, 255, 0.86);
   --glass-border: rgba(8, 12, 24, 0.1);
@@ -101,6 +111,9 @@ body {
   background: var(--bg-0);
   color: var(--ink-1);
   font-family: var(--font-sans);
+  /* Inter OpenType features:
+     cv11 = lowercase 'l' with tail (Inter stylistic alternate),
+     ss01/ss03 = single-storey 'a' and open 'g' (alters some letter shapes). */
   font-feature-settings: 'cv11', 'ss01', 'ss03';
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -155,32 +168,6 @@ button {
   background: rgba(255, 255, 255, 0.18);
   background-clip: padding-box;
   border: 2px solid transparent;
-}
-
-/* Utility classes */
-.glass {
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--glass-shadow);
-  backdrop-filter: blur(24px) saturate(140%);
-  -webkit-backdrop-filter: blur(24px) saturate(140%);
-}
-
-/* Entrance animation */
-@keyframes fade-up {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 14px, 0);
-  }
-  to {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
-}
-
-.fade-up {
-  animation: fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* Media query: reduced motion */

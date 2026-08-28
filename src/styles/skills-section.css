@@ -86,7 +86,7 @@
 /* Light mode override —— chip on light bg needs pure white bg + border to 'float' out */
 [data-theme="light"] .skills__list .chip {
   background: var(--bg-1);
-  border-color: rgba(8, 12, 24, 0.18);
+  border-color: var(--line-stronger);
 }
 .skills__list .chip:hover::before { opacity: 1; }
 

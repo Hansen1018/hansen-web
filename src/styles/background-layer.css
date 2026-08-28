@@ -81,6 +81,10 @@
   100% { transform: translate3d(-6vw, 4vh, 0) scale(0.9); }
 }
 
+/* Dark-mode only by design: the overlay-blend noise + 5% opacity reads as
+   "subtle film grain" on the dark --bg-0, but becomes invisible against a
+   textured light bg (where it adds noise without contrast). No light-mode
+   override — intentional, per visual review. */
 .aurora__noise {
   position: absolute;
   inset: 0;

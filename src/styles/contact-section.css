@@ -68,7 +68,7 @@
 /* Light mode override —— "07 · Get in touch" cyan fails WCAG on light bg */
 [data-theme="light"] .contact__eyebrow {
   font-weight: 600;
-  text-shadow: 0 0 12px rgba(34, 211, 238, 0.4);
+  text-shadow: 0 0 12px var(--accent-2-glow);
 }
 
 .contact__title {
@@ -161,7 +161,7 @@
 /* Light mode override: social buttons use pure white + dark border on light bg */
 [data-theme="light"] .social {
   background: var(--bg-1);
-  border-color: rgba(8, 12, 24, 0.18);
+  border-color: var(--line-stronger);
 }
 
 .legal {

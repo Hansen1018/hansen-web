@@ -39,11 +39,11 @@
    Light mode page bg is #f4f6fb + radial-gradient overlay (not solid color).
    var(--glass-bg)=rgba(255,255,255,0.72) on this overlay-tinted light bg has
    insufficient visual contrast → looks like 'plain text laid directly on background'.
-   Switch to --bg-1 (#ffffff pure white) + --line-strong (rgba(8,12,24,0.16))
+   Switch to --bg-1 (#ffffff pure white) + --line-stronger (rgba(8,12,24,0.18))
    to form a clear light-mode card */
 [data-theme="light"] .blog-card {
   background: var(--bg-1);
-  border-color: rgba(8, 12, 24, 0.18);
+  border-color: var(--line-stronger);
   box-shadow:
     0 1px 2px rgba(8, 12, 24, 0.06),
     0 6px 16px -4px rgba(8, 12, 24, 0.08);
@@ -58,14 +58,14 @@
 }
 
 .blog-card__meta {
-  font-size: 0.72rem;
+  font-size: 12px;
   color: var(--ink-3);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
 .blog-card__title {
-  font-size: 1.05rem;
+  font-size: 17px;
   font-weight: 600;
   line-height: 1.4;
   margin: 0;
@@ -75,7 +75,7 @@
 .blog-card__title a:hover { color: rgb(120, 220, 235); }
 
 .blog-card__desc {
-  font-size: 0.875rem;
+  font-size: 14px;
   color: var(--ink-2);
   line-height: 1.55;
   margin: 0;
@@ -94,7 +94,7 @@
 }
 
 .blog-tag {
-  font-size: 0.68rem;
+  font-size: 11px;
   padding: 2px 8px;
   border-radius: 999px;
   background: var(--glass-bg);
@@ -104,7 +104,7 @@
 
 .blog-loading {
   color: var(--ink-3);
-  font-size: 0.9rem;
+  font-size: 14px;
   padding: 1rem 0;
 }
 
@@ -115,21 +115,21 @@
 
 [data-theme="light"] .blog-loading a {
   color: var(--accent-2);
-  text-shadow: 0 0 10px rgba(34, 211, 238, 0.4);
+  text-shadow: 0 0 10px var(--accent-2-glow);
 }
 
 .blog-more {
   display: block;
   margin-top: 0.5rem;
   text-align: right;
-  font-size: 0.9rem;
+  font-size: 14px;
   color: rgb(120, 220, 235);
   text-decoration: none;
 }
 
 [data-theme="light"] .blog-more {
   color: var(--accent-2);
-  text-shadow: 0 0 10px rgba(34, 211, 238, 0.4);
+  text-shadow: 0 0 10px var(--accent-2-glow);
 }
 
 .blog-more:hover { text-decoration: underline; }

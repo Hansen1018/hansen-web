@@ -150,6 +150,10 @@
 
 .m-menu-item.is-active .m-menu-link { color: var(--ink-1); }
 
+.m-menu-label {
+  /* Plain inline text inside .m-menu-link; sizing inherits from parent. */
+}
+
 .m-menu-dot {
   width: 8px;
   height: 8px;

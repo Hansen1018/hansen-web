@@ -46,7 +46,7 @@
    make text 'float'. In dark mode --bg-0 dark bg + cyan has sufficient contrast, no change. */
 [data-theme="light"] .section__index {
   font-weight: 600;
-  text-shadow: 0 0 14px rgba(34, 211, 238, 0.45);
+  text-shadow: 0 0 14px var(--accent-2-glow);
 }
 
 /* Light mode override —— "TOOLBOX" and similar eyebrows: 48% dark text nearly invisible on light bg */
@@ -77,6 +77,13 @@
   width: clamp(60px, 12vw, 140px);
   height: 1px;
   background: linear-gradient(90deg, var(--line-strong), transparent);
+}
+
+.section__body {
+  /* Container for section-specific content (lists, cards, etc.). SectionShell
+     wraps the children prop inside this div, but consumers currently use their
+     own root selectors (.grid, .skills, .timeline, ...). Kept as a hook for
+     future shared spacing / typography. */
 }
 
 @media (max-width: 640px) {

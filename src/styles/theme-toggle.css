@@ -37,6 +37,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  /* Defensive: inherits color from .theme-toggle today, but if a future redesign
+     ever sets a color directly on the icon, this explicit inherit keeps the
+     light-mode override contract intact. */
+  color: inherit;
 }
 
 [data-theme="light"] .theme-toggle {
@@ -49,6 +53,10 @@
   background: rgba(255, 255, 255, 0.92);
   color: rgba(8, 12, 24, 0.94);
   border-color: rgba(8, 12, 24, 0.24);
+}
+
+[data-theme="light"] .theme-toggle__icon {
+  color: inherit;
 }
 
 @media (max-width: 720px) {

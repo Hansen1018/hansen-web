@@ -116,7 +116,7 @@
 /* Light mode override —— same-color glow + font-weight 600 (was 400) */
 [data-theme="light"] .timeline__year {
   font-weight: 600;
-  text-shadow: 0 0 12px rgba(34, 211, 238, 0.4);
+  text-shadow: 0 0 12px var(--accent-2-glow);
 }
 
 .timeline__org {

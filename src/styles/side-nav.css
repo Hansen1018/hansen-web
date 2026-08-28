@@ -106,7 +106,7 @@
    Flipped to light tooltip consistent with overall light style */
 [data-theme="light"] .sidenav__label {
   background: rgba(255, 255, 255, 0.92);
-  border-color: rgba(8, 12, 24, 0.15);
+  border-color: var(--line-stronger);
 }
 
 .sidenav__btn:hover .sidenav__label,
