@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 
+const hasNativeScrollEnd = typeof window !== 'undefined' && 'onscrollend' in window
+
 /**
  * Scroll-spy: tracks the active state of a set of sections.
  *
@@ -19,8 +21,6 @@ import { useEffect, useState, useCallback, useRef } from 'react'
  * @param ids list of section ids (for DOM lookup)
  * @returns { active, scrollTo }
  */
-const hasNativeScrollEnd = typeof window !== 'undefined' && 'onscrollend' in window
-
 export function useActiveSection(ids: readonly string[]) {
   const [active, setActive] = useState<string>(ids[0] ?? '')
   const lockedIdRef = useRef<string | null>(null)
@@ -46,7 +46,10 @@ export function useActiveSection(ids: readonly string[]) {
 
     const lastId = ids[ids.length - 1]
     const lastEl = lastId ? document.getElementById(lastId) : null
-    if (lastEl) {
+    // lastId is structurally guaranteed truthy here (lastEl derived from it),
+    // but noUncheckedIndexedAccess widens ids[i] to string | undefined, so
+    // explicit narrowing is required for the assignment below.
+    if (lastEl && lastId) {
       const r = lastEl.getBoundingClientRect()
       if (r.top >= 0 && r.bottom <= window.innerHeight) {
         best = lastId
