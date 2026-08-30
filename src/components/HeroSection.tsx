@@ -29,17 +29,24 @@ export default function HeroSection() {
 
   useEffect(() => {
     // Respect prefers-reduced-motion: render the name once, skip the loop.
-    const prefersReducedMotion =
-      typeof window !== 'undefined' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    if (prefersReducedMotion) {
+    const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const onReducedMotionChange = (event: MediaQueryListEvent) => {
+      if (!event.matches) return
+      if (timer) clearTimeout(timer)
       setTyped(word)
-      return
+    }
+    reducedMotionQuery.addEventListener('change', onReducedMotionChange)
+
+    if (reducedMotionQuery.matches) {
+      setTyped(word)
+      return () => {
+        reducedMotionQuery.removeEventListener('change', onReducedMotionChange)
+      }
     }
 
     let charIdx = 0
     let phase: 'typing' | 'deleting' | 'pause' = 'typing'
-    let timer: ReturnType<typeof setTimeout> | null = null
 
     function tick() {
       if (phase === 'typing') {
@@ -71,6 +78,7 @@ export default function HeroSection() {
     tick()
     return () => {
       if (timer) clearTimeout(timer)
+      reducedMotionQuery.removeEventListener('change', onReducedMotionChange)
     }
   }, [word])
 

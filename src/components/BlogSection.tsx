@@ -49,9 +49,9 @@ export default function BlogSection() {
           // when a post is listed under multiple sections.
           const seen = new Set<string>()
           const unique = arr.filter((p: BlogPost) => {
-            const k = p.url || `__nokey_${seen.size}`
-            if (seen.has(k)) return false
-            seen.add(k)
+            if (!p.url) return true
+            if (seen.has(p.url)) return false
+            seen.add(p.url)
             return true
           })
           setPosts(unique.slice(0, blogCfg.limit || 3))
