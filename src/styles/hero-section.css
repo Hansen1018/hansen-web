@@ -236,6 +236,10 @@
 
 @keyframes caret-blink { 50% { opacity: 0; } }
 
+@media (prefers-reduced-motion: reduce) {
+  .hero__name-caret { animation: none; }
+}
+
 .hero__hi {
   font-size: clamp(14px, 1.6vw, 16px);
   color: var(--ink-3);

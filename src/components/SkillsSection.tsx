@@ -1,6 +1,6 @@
 import SectionShell from './SectionShell'
 import { profile } from '@/data/profile'
-import { hashHue } from '@/lib/hash'
+import { hashHue } from '@/lib/hue'
 
 export default function SkillsSection() {
   const isEmpty =

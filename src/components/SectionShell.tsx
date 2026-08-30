@@ -42,7 +42,15 @@ export default function SectionShell({ id, index, eyebrow, title, children }: Se
         if (timerId) clearTimeout(timerId)
         timerId = setTimeout(() => apply(target), 150)
       },
-      { threshold: 0.1, rootMargin: '0px 0px -10% 0px' },
+      {
+        // threshold 0 + modest bottom margin: any intersection counts, so
+        // short sections near the page bottom still fade in. The previous
+        // 10% threshold could leave very short sections invisible if the
+        // user scrolled past them quickly without the section ever
+        // occupying ≥10% of the viewport.
+        threshold: 0,
+        rootMargin: '0px 0px -5% 0px',
+      },
     )
     observer.observe(el)
 

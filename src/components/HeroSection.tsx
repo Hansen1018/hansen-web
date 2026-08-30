@@ -28,6 +28,15 @@ export default function HeroSection() {
   const word = profile.name
 
   useEffect(() => {
+    // Respect prefers-reduced-motion: render the name once, skip the loop.
+    const prefersReducedMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (prefersReducedMotion) {
+      setTyped(word)
+      return
+    }
+
     let charIdx = 0
     let phase: 'typing' | 'deleting' | 'pause' = 'typing'
     let timer: ReturnType<typeof setTimeout> | null = null

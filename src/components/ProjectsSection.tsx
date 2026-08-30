@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import SectionShell from './SectionShell'
 import { profile } from '@/data/profile'
-import { hashHue } from '@/lib/hash'
+import { hashHue } from '@/lib/hue'
 
 /**
  * ProjectsSection — curated project card grid.

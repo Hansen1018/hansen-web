@@ -2,7 +2,7 @@
 
 > [English](./README.md) | 中文
 
-基于 **Next.js App Router + React + TypeScript** 构建的个人主页。玻璃拟态设计 + 极光氛围背景 + Hugo 博客构建期联动。
+基于 **Next.js App Router + React + TypeScript** 构建的个人主页。玻璃拟态设计 + 极光氛围背景 + 客户端实时从 Hugo 博客拉取最新文章（零构建时同步）。
 
 **在线访问**：https://hansendong.top
 

@@ -2,7 +2,7 @@
 
 > [English](./README.md) · [中文](./README.zh-CN.md)
 
-Luminous personal portfolio built with **Next.js App Router + React + TypeScript**. Glassmorphism design, aurora ambience, scroll-spy navigation, typewriter hero, and a blog feed synced build-time from the Hugo blog.
+Luminous personal portfolio built with **Next.js App Router + React + TypeScript**. Glassmorphism design, aurora ambience, scroll-spy navigation, typewriter hero, and a live blog feed fetched client-side from the Hugo blog.
 
 **Live**: https://hansendong.top
 

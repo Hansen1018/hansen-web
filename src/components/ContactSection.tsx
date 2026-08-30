@@ -1,11 +1,6 @@
 import { profile } from '@/data/profile'
 import { socialIconPaths } from './socialIcons'
 
-// Hardcoded instead of `import nextPkg from 'next/package.json'` — keeps the
-// build off bundler internals (which can shift between Next minor versions) and
-// matches the package.json version directly. Keep in sync on upgrade.
-const NEXT_VERSION = '16.3.1'
-
 export default function ContactSection() {
   return (
     <section id="contact" className="contact">
@@ -74,7 +69,7 @@ export default function ContactSection() {
       <footer className="legal">
         <span>© {new Date().getFullYear()} {profile.name}.</span>
         <span className="legal__sep" aria-hidden="true">·</span>
-        <span>Built with Next.js {NEXT_VERSION}</span>
+        <span>Built with Next.js</span>
       </footer>
     </section>
   )

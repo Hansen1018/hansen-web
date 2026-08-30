@@ -4,7 +4,6 @@
 # Free tier covers public repos on GitHub. After installing the GitHub App
 # from https://github.com/apps/coderabbitai and granting access to this repo,
 # CodeRabbit will auto-review every PR against main and surface:
-#   - Vue 3 <script setup> / Options API anti-patterns
 #   - accessibility gaps (a11y) in templates
 #   - missing alt / loading / decoding on <img>
 #   - inline event handlers (XSS surface)

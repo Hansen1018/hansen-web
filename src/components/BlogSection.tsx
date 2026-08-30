@@ -44,7 +44,17 @@ export default function BlogSection() {
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const all = await res.json()
         if (!ctrl.signal.aborted) {
-          setPosts((Array.isArray(all) ? all : []).slice(0, blogCfg.limit || 3))
+          const arr = Array.isArray(all) ? all : []
+          // Dedupe by URL — Hugo index.json occasionally surfaces duplicates
+          // when a post is listed under multiple sections.
+          const seen = new Set<string>()
+          const unique = arr.filter((p: BlogPost) => {
+            const k = p.url || `__nokey_${seen.size}`
+            if (seen.has(k)) return false
+            seen.add(k)
+            return true
+          })
+          setPosts(unique.slice(0, blogCfg.limit || 3))
         }
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') return
@@ -104,7 +114,7 @@ export default function BlogSection() {
       ) : (
         <div className="blog-grid">
           {posts.map((p, i) => (
-            <article key={`${p.url}#${i}`} className="blog-card">
+            <article key={p.url || `blog-${i}`} className="blog-card">
               <div className="blog-card__meta">{formatDate(p.date)}</div>
               <h3 className="blog-card__title">
                 <a
