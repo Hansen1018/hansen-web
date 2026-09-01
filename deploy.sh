@@ -67,24 +67,49 @@ fi
 # exact string match, since the policy string is long and directive order
 # may vary across hosts.
 echo "→ Verifying security headers on $PUBLIC_URL..."
-response_headers="$(curl -fsSI --max-time 10 "$PUBLIC_URL/" 2>/dev/null || true)"
+# -L follows redirects so the check sees final-response headers (not redirect
+# response, which typically carries no security headers).
+# `|| true` masks curl's non-zero exit so `set -euo pipefail` doesn't abort
+# before the warn-only handler runs (the exact case this check exists to catch).
+response_headers="$(curl -fsSLI --max-time 10 "$PUBLIC_URL/" 2>/dev/null || true)"
 if [[ -z "$response_headers" ]]; then
   echo "  ⚠ $PUBLIC_URL unreachable, skipping security-header check"
 else
-  declare -A EXPECTED_HEADERS=(
-    ["x-content-type-options"]="nosniff"
-    ["x-frame-options"]="DENY"
-    ["referrer-policy"]="strict-origin-when-cross-origin"
-    ["permissions-policy"]="camera=(), microphone=(), geolocation=()"
-    ["content-security-policy"]=""  # checked via critical directives below
+  # Two parallel plain arrays (not associative arrays) so the script stays
+  # portable to Bash 3.x (macOS ships 3.2 by default). The empty entry for
+  # content-security-policy is intentional — it is checked via critical
+  # directives below instead of an exact-value compare.
+  HEADERS=(
+    "x-content-type-options"
+    "x-frame-options"
+    "referrer-policy"
+    "permissions-policy"
+    "content-security-policy"
+  )
+  VALUES=(
+    "nosniff"
+    "DENY"
+    "strict-origin-when-cross-origin"
+    "camera=(), microphone=(), geolocation=()"
+    ""
   )
   missing_headers=()
   mismatched_headers=()
-  for header in "${!EXPECTED_HEADERS[@]}"; do
-    expected_value="${EXPECTED_HEADERS[$header]}"
+  for i in "${!HEADERS[@]}"; do
+    header="${HEADERS[$i]}"
+    expected_value="${VALUES[$i]}"
+    # Concatenate every matching header line with a space. Some hosts emit
+    # duplicate headers (e.g. multiple CSP lines merged via add_header) and
+    # `head -1` would silently drop the later values.
+    # The trailing `|| true` is required: with `set -o pipefail`, a missing
+    # header causes grep to exit 1, which would otherwise abort the whole
+    # script via `set -e` — defeating the warn-only handler on the next lines.
     actual_value=$(printf '%s\n' "$response_headers" \
-      | grep -i "^${header}:" | head -1 \
-      | sed -E 's/^[^:]+:[[:space:]]*//I' | tr -d '\r')
+      | grep -i "^${header}:" \
+      | sed -E 's/^[^:]+:[[:space:]]*//I' \
+      | tr -d '\r' \
+      | paste -sd ' ' - \
+      || true)
     if [[ -z "$actual_value" ]]; then
       missing_headers+=("$header")
     elif [[ "$header" == "content-security-policy" ]]; then
@@ -108,7 +133,9 @@ else
     echo "    These must be configured at the static host (nginx/Caddy)."
     echo "    See deploy/nginx-security-headers.conf for the recommended snippet."
   else
-    echo "  ✓ all 5 security headers present and match expected values"
+    # Success line intentionally reflects partial CSP coverage (only the two
+    # critical directives are checked), to avoid overstating verification.
+    echo "  ✓ all 5 security headers present (CSP verified for critical directives)"
   fi
 fi
 
