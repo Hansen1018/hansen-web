@@ -3,8 +3,13 @@
 
 import { chromium } from 'playwright';
 
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const URL = process.env.SITE_URL || 'https://hansendong.top';
-const OUT = '/workspace/hansen-web-next/screenshots/sidenav-fix';
+// Output dir: env var OUT_DIR overrides, otherwise <repo>/screenshots/<script-name>.
+const OUT = process.env.OUT_DIR || path.join(__dirname, '..', 'screenshots', 'sidenav-fix');
 
 async function capture(page, name) {
   await page.waitForTimeout(400);

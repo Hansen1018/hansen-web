@@ -4,8 +4,13 @@
 import { chromium } from 'playwright';
 import fs from 'node:fs/promises';
 
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const URL = process.env.SITE_URL || 'https://hansendong.top';
-const OUT = '/workspace/hansen-web-next/screenshots/cyan-fixed';
+// Output dir: env var OUT_DIR overrides, otherwise <repo>/screenshots/<script-name>.
+const OUT = process.env.OUT_DIR || path.join(__dirname, '..', 'screenshots', 'cyan-fixed');
 
 function relLum(rgb) {
   const [r, g, b] = rgb.map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
@@ -37,7 +42,7 @@ let failures = 0;
       await page.waitForTimeout(300);
 
       // ensure all sections rendered
-      for (const id of ['hero', 'about', 'projects', 'skills', 'side-hustle', 'timeline', 'contact', 'blog']) {
+      for (const id of ['hero', 'about', 'projects', 'skills', 'side', 'timeline', 'contact', 'blog']) {
         await page.evaluate((id) => document.getElementById(id)?.scrollIntoView({ behavior: 'instant', block: 'start' }), id);
         await page.waitForTimeout(150);
       }
@@ -116,7 +121,7 @@ let failures = 0;
     await page.waitForTimeout(400);
     await page.screenshot({ path: `${OUT}/03-desktop-timeline-light.png` });
 
-    await page.evaluate(() => document.getElementById('side-hustle')?.scrollIntoView({ behavior: 'instant', block: 'start' }));
+    await page.evaluate(() => document.getElementById('side')?.scrollIntoView({ behavior: 'instant', block: 'start' }));
     await page.waitForTimeout(400);
     await page.screenshot({ path: `${OUT}/04-desktop-side-hustle-light.png` });
 

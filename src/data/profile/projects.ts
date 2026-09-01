@@ -21,15 +21,14 @@ export const profileProjects: Project[] = [
     featured: true,
   },
   {
-    // This entry describes the currently-deployed personal site (the
-    // Next.js codebase in this repo, served at https://hansendong.top).
-    // The earlier "hansen-web" Vue 3 + Vite SSG codebase has been
-    // retired; this site is its Next.js successor.
+    // This entry describes the currently-deployed personal site — the
+    // Next.js codebase in this repo (Hansen1018/hansen-web), served at
+    // https://hansendong.top.
     title:    'hansen-web',
     desc:     '本站源码 · 你正在浏览的网站。Next.js 16 App Router + React + TypeScript，Glassmorphism 设计、极光氛围背景、scroll-spy 导航、打字机 hero、live Hugo 博客 feed、完整 SEO + JSON-LD 结构化数据、SSR/SSG 静态导出零运行时成本。',
     tags:     ['Next.js', 'React', 'TypeScript', 'Glassmorphism', 'MIT'],
-    link:     'https://github.com/Hansen1018/hansen-web-next',
-    repo:     'https://github.com/Hansen1018/hansen-web-next',
+    link:     'https://github.com/Hansen1018/hansen-web',
+    repo:     'https://github.com/Hansen1018/hansen-web',
     logo:     'https://hansendong.top/og.png',
     logoFit:  'cover',
     year:     2026,
