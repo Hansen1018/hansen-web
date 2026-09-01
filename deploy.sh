@@ -78,7 +78,7 @@ echo "→ Verifying security headers on $PUBLIC_URL..."
 # The trailing `|| true` masks curl/awk non-zero exit so `set -euo pipefail`
 # doesn't abort before the warn-only handler runs (the exact case this
 # check exists to catch).
-response_headers="$(curl -fsSLI --max-time 10 "$PUBLIC_URL/" 2>/dev/null | awk '/^HTTP\// { hdr = $0; body = ""; next } { body = body (body ? "\n" : "") $0 } END { printf "%s\n%s", hdr, body }' || true)"
+response_headers="$(curl -fsSL -D - -o /dev/null --max-time 10 "$PUBLIC_URL/" 2>/dev/null | awk '/^HTTP\// { hdr = $0; body = ""; next } { body = body (body ? "\n" : "") $0 } END { printf "%s\n%s", hdr, body }' || true)"
 if [[ -z "$response_headers" ]]; then
   echo "  ⚠ $PUBLIC_URL unreachable, skipping security-header check"
 else
@@ -86,25 +86,23 @@ else
   # portable to Bash 3.x (macOS ships 3.2 by default). The empty entry for
   # content-security-policy is intentional — it is checked via critical
   # directives below instead of an exact-value compare.
-  HEADERS=(
-    "x-content-type-options"
-    "x-frame-options"
-    "referrer-policy"
-    "permissions-policy"
-    "content-security-policy"
-  )
-  VALUES=(
-    "nosniff"
-    "DENY"
-    "strict-origin-when-cross-origin"
-    "camera=(), microphone=(), geolocation()"
-    ""
+  # Single array of "header:value" pairs — keeps header + its expected
+  # value coupled together so a future reorder or addition can't silently
+  # misalign them (Bash 3.x compatibility precludes associative arrays).
+  # CSP's expected value is empty (verified via critical-directive check
+  # below); the trailing ':' marks "no exact value compare".
+  EXPECTED=(
+    "x-content-type-options:nosniff"
+    "x-frame-options:DENY"
+    "referrer-policy:strict-origin-when-cross-origin"
+    "permissions-policy:camera=(), microphone=(), geolocation()"
+    "content-security-policy:"
   )
   missing_headers=()
   mismatched_headers=()
-  for i in "${!HEADERS[@]}"; do
-    header="${HEADERS[$i]}"
-    expected_value="${VALUES[$i]}"
+  for entry in "${EXPECTED[@]}"; do
+    header="${entry%%:*}"
+    expected_value="${entry#*:}"
     # Concatenate every matching header line. Some hosts emit duplicate
     # headers (e.g. multiple CSP lines merged via add_header) and `head -1`
     # would silently drop the later values.
