@@ -90,12 +90,13 @@ else
   # value coupled together so a future reorder or addition can't silently
   # misalign them (Bash 3.x compatibility precludes associative arrays).
   # CSP's expected value is empty (verified via critical-directive check
-  # below); the trailing ':' marks "no exact value compare".
+  # below); the trailing ':' in 'content-security-policy:' marks
+  # "no exact value compare".
   EXPECTED=(
     "x-content-type-options:nosniff"
     "x-frame-options:DENY"
     "referrer-policy:strict-origin-when-cross-origin"
-    "permissions-policy:camera=(), microphone=(), geolocation()"
+    "permissions-policy:camera=(), microphone=(), geolocation=()"
     "content-security-policy:"
   )
   missing_headers=()
@@ -125,9 +126,11 @@ else
       sep=' '
     fi
     actual_value=$(printf '%s\n' "$response_headers" \
+      | sed 's/^[[:space:]]*//' \
       | grep -i "^${header}:" \
       | sed -E 's/^[^:]+:[[:space:]]*//; s/[[:space:]]+$//' \
       | tr -d '\r' \
+      | sort -u \
       | paste -sd "$sep" - \
       || true)
     if [[ -z "$actual_value" ]]; then
