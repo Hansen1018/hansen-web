@@ -22,11 +22,18 @@ export const socialIconPaths = {
 export type SocialIconName = keyof typeof socialIconPaths
 
 export function getSocialHandle(url: string, label: string): string {
-  if (url.startsWith('mailto:')) return url.slice(7)
-  if (url.startsWith('https://t.me/')) return '@' + url.slice(15)
-  if (url.includes('github.com/')) return '@' + url.split('github.com/')[1]
-  if (url.includes('twitter.com/') || url.includes('x.com/')) {
-    return '@' + url.split('/').pop()
-  }
+  // mailto:foo@bar → foo@bar
+  if (url.startsWith('mailto:')) return url.slice('mailto:'.length)
+
+  // Anchor on scheme + known host so we never match e.g. "mygithub.com"
+  // or "fakex.com/foo", and take the first path segment as the username
+  // (so "github.com/Hansen1018/repo" → "@Hansen1018", not "@Hansen1018/repo").
+  const tMeMatch = url.match(/^https?:\/\/(?:www\.)?t\.me\/([^/?#]+)/)
+  if (tMeMatch) return '@' + tMeMatch[1]!
+  const ghMatch = url.match(/^https?:\/\/(?:www\.)?github\.com\/([^/?#]+)/)
+  if (ghMatch) return '@' + ghMatch[1]!
+  const xMatch = url.match(/^https?:\/\/(?:www\.)?(?:twitter|x)\.com\/([^/?#]+)/)
+  if (xMatch) return '@' + xMatch[1]!
+
   return label
 }

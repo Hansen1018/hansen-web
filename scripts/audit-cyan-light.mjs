@@ -42,7 +42,7 @@ const FAILURES = [];
     await page.waitForTimeout(300);
 
     // Scroll to each section to ensure they're in DOM
-    const sections = ['hero', 'about', 'projects', 'skills', 'side-hustle', 'timeline', 'contact', 'blog'];
+    const sections = ['hero', 'about', 'projects', 'skills', 'side', 'timeline', 'contact', 'blog'];
     for (const id of sections) {
       await page.evaluate((id) => document.getElementById(id)?.scrollIntoView({ behavior: 'instant', block: 'start' }), id);
       await page.waitForTimeout(200);
