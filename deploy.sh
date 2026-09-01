@@ -55,6 +55,137 @@ if ! curl -fsSI --max-time 10 "$PUBLIC_URL/" >/dev/null 2>&1; then
   echo "  ✓ localhost responded"
 fi
 
+# 4. Security-header verification (best-effort: warn only, never block deploy).
+# These headers used to live in next.config.mjs but Next.js ignores
+# headers() under output: 'export', so the static host (nginx/Caddy) is
+# responsible. See deploy/nginx-security-headers.conf for the recommended snippet.
+#
+# We verify BOTH presence AND expected value to prevent a misconfigured host
+# from returning success while serving a permissive policy (e.g. an
+# X-Frame-Options: ALLOWALL regression). CSP is checked for two critical
+# directives (frame-ancestors 'none' + default-src 'self') rather than an
+# exact string match, since the policy string is long and directive order
+# may vary across hosts.
+echo "→ Verifying security headers on $PUBLIC_URL..."
+# curl -fsSLI follows redirects, so the response can contain multiple
+# HTTP/ blocks (one per redirect hop). The awk script tracks the LAST
+# ^HTTP/ line and accumulates body from there to EOF: each ^HTTP/ resets
+# the body buffer, so an intermediate redirect's security headers are
+# discarded. Without this fix, a redirect chain could yield a silent
+# false positive — a header present only on an intermediate response would
+# still print "all 5 security headers present" even though the final
+# response lacks it.
+# The trailing `|| true` masks curl/awk non-zero exit so `set -euo pipefail`
+# doesn't abort before the warn-only handler runs (the exact case this
+# check exists to catch).
+response_headers="$(curl -fsSL -D - -o /dev/null --max-time 10 "$PUBLIC_URL/" 2>/dev/null | awk '/^HTTP\// { hdr = $0; tail = ""; next } { tail = tail (tail ? "\n" : "") $0 } END { if (hdr != "") printf "%s%s%s", hdr, (tail ? "\n" : ""), tail }' || true)"
+if [[ -z "$response_headers" ]]; then
+  echo "  ⚠ $PUBLIC_URL unreachable, skipping security-header check"
+else
+  # Two parallel plain arrays (not associative arrays) so the script stays
+  # portable to Bash 3.x (macOS ships 3.2 by default). The empty entry for
+  # content-security-policy is intentional — it is checked via critical
+  # directives below instead of an exact-value compare.
+  # Single array of "header:value" pairs — keeps header + its expected
+  # value coupled together so a future reorder or addition can't silently
+  # misalign them (Bash 3.x compatibility precludes associative arrays).
+  # CSP's expected value is empty (verified via critical-directive check
+  # below); the trailing ':' in 'content-security-policy:' marks
+  # "no exact value compare".
+  EXPECTED=(
+    "x-content-type-options:nosniff"
+    "x-frame-options:DENY"
+    "referrer-policy:strict-origin-when-cross-origin"
+    "permissions-policy:camera=(), microphone=(), geolocation=()"
+    "content-security-policy:"
+  )
+  missing_headers=()
+  mismatched_headers=()
+  for entry in "${EXPECTED[@]}"; do
+    header="${entry%%:*}"
+    expected_value="${entry#*:}"
+    # Concatenate every matching header line. Some hosts emit duplicate
+    # headers (e.g. multiple CSP lines merged via add_header) and `head -1`
+    # would silently drop the later values.
+    #
+    # Separator choice:
+    #   - CSP: '; ' — preserves directive boundaries across merged
+    #     Content-Security-Policy headers (each header line is a separate
+    #     directive; joining with space would lose the ';' that separates
+    #     them, making our boundary-anchored CSP regex produce spurious
+    #     false-positives when 'frame-ancestors '\''none'\'' or
+    #     'default-src '\''self'\'' lands mid-string).
+    #   - other headers: ' ' — single-value semantics; multi-line emission
+    #     is unusual but space-joining is benign.
+    # The trailing `|| true` is required: with `set -o pipefail`, a missing
+    # header causes grep to exit 1, which would otherwise abort the whole
+    # script via `set -e` — defeating the warn-only handler on the next lines.
+    if [[ "$(printf %s "$header" | tr "[:upper:]" "[:lower:]")" == "content-security-policy" ]]; then
+      sep='; '
+    else
+      sep=' '
+    fi
+    actual_value=$(printf '%s\n' "$response_headers" \
+      | sed 's/^[[:space:]]*//' \
+      | grep -i "^${header}:" \
+      | sed -E 's/^[^:]+:[[:space:]]*//; s/[[:space:]]+$//' \
+      | tr -d '\r' \
+      | sort -u \
+      | { if [[ "$sep" == "; " ]]; then paste -sd ';' - | sed 's/;/; /g'; else paste -sd "$sep" -; fi; } \
+      || true)
+    if [[ -z "$actual_value" ]]; then
+      missing_headers+=("$header")
+    elif [[ "$(printf %s "$header" | tr "[:upper:]" "[:lower:]")" == "content-security-policy" ]]; then
+      weak=0
+      # Both critical directives must appear as standalone directives
+      # (not as prefixed junk like "not-frame-ancestors ..." which browsers
+      # ignore) and must END at their canonical value:
+      #   - frame-ancestors 'none'  → followed by ; or end-of-string
+      #     (rejects `frame-ancestors 'none' https://evil.example`)
+      #   - default-src 'self'     → followed by ; or end-of-string
+      #     (rejects `default-src 'self' https://evil.example`)
+      # The boundary-anchored ERE catches both prefixed-junk and
+      # extra-source regressions. Loop unrolled into explicit checks so
+      # the diagnostic message names WHICH directive(s) actually failed
+      # (the previous for-loop broke on first failure but the message
+      # listed both, making policy troubleshooting harder).
+      missing_directives=()
+      if ! printf '%s' "$actual_value" \
+            | grep -qiE "(^|[[:space:];])frame-ancestors[[:space:]]+'none'[[:space:]]*(;|$)"; then
+        weak=1
+        missing_directives+=("frame-ancestors 'none'")
+      fi
+      if ! printf '%s' "$actual_value" \
+            | grep -qiE "(^|[[:space:];])default-src[[:space:]]+'self'[[:space:]]*(;|$)"; then
+        weak=1
+        missing_directives+=("default-src 'self'")
+      fi
+      if [[ $weak -eq 1 ]]; then
+        mismatched_headers+=("$header (missing critical directive: ${missing_directives[*]})")
+      fi
+    else
+      # Case-insensitive compare per RFC 7230 §3.2.4 via POSIX tr (Bash 3.x
+      # portable; ${var,,} requires Bash 4+). '|| printf' is a defensive
+      # fallback for the very-rare case that tr itself fails.
+      actual_lc="$(printf '%s' "$actual_value"   | tr '[:upper:]' '[:lower:]' 2>/dev/null || printf '%s' "$actual_value")"
+      expected_lc="$(printf '%s' "$expected_value" | tr '[:upper:]' '[:lower:]' 2>/dev/null || printf '%s' "$expected_value")"
+      if [[ "$actual_lc" != "$expected_lc" ]]; then
+        mismatched_headers+=("$header (expected '$expected_value', got '$actual_value')")
+      fi
+    fi
+  done
+  if [[ ${#missing_headers[@]} -gt 0 || ${#mismatched_headers[@]} -gt 0 ]]; then
+    [[ ${#missing_headers[@]} -gt 0 ]] && echo "  ⚠ missing headers: ${missing_headers[*]}"
+    [[ ${#mismatched_headers[@]} -gt 0 ]] && echo "  ⚠ mismatched headers: ${mismatched_headers[*]}"
+    echo "    These must be configured at the static host (nginx/Caddy)."
+    echo "    See deploy/nginx-security-headers.conf for the recommended snippet."
+  else
+    # Success line intentionally reflects partial CSP coverage (only the two
+    # critical directives are checked), to avoid overstating verification.
+    echo "  ✓ all ${#EXPECTED[@]} security headers present (CSP verified for critical directives)"
+  fi
+fi
+
 if [[ "$DEPLOY_MODE" == "remote" ]]; then
   echo "✓ Deploy complete → $PUBLIC_URL (host: $HOST)"
 else
