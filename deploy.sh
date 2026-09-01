@@ -78,7 +78,7 @@ echo "→ Verifying security headers on $PUBLIC_URL..."
 # The trailing `|| true` masks curl/awk non-zero exit so `set -euo pipefail`
 # doesn't abort before the warn-only handler runs (the exact case this
 # check exists to catch).
-response_headers="$(curl -fsSL -D - -o /dev/null --max-time 10 "$PUBLIC_URL/" 2>/dev/null | awk '/^HTTP\// { hdr = $0; body = ""; next } { body = body (body ? "\n" : "") $0 } END { printf "%s\n%s", hdr, body }' || true)"
+response_headers="$(curl -fsSL -D - -o /dev/null --max-time 10 "$PUBLIC_URL/" 2>/dev/null | awk '/^HTTP\// { hdr = $0; tail = ""; next } { tail = tail (tail ? "\n" : "") $0 } END { printf "%s\n%s", hdr, tail }' || true)"
 if [[ -z "$response_headers" ]]; then
   echo "  ⚠ $PUBLIC_URL unreachable, skipping security-header check"
 else
