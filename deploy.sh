@@ -55,6 +55,30 @@ if ! curl -fsSI --max-time 10 "$PUBLIC_URL/" >/dev/null 2>&1; then
   echo "  ✓ localhost responded"
 fi
 
+# 4. Security-header verification (best-effort: warn only, never block deploy).
+# These four headers used to live in next.config.mjs but Next.js ignores
+# headers() under output: 'export', so the static host (nginx/Caddy) is
+# responsible. See deploy/nginx-security-headers.conf for the recommended snippet.
+echo "→ Verifying security headers on $PUBLIC_URL..."
+response_headers="$(curl -fsSI --max-time 10 "$PUBLIC_URL/" 2>/dev/null || true)"
+if [[ -z "$response_headers" ]]; then
+  echo "  ⚠ $PUBLIC_URL unreachable, skipping security-header check"
+else
+  missing_headers=()
+  for header in content-security-policy x-frame-options referrer-policy permissions-policy; do
+    if ! printf '%s\n' "$response_headers" | grep -qi "^${header}:"; then
+      missing_headers+=("$header")
+    fi
+  done
+  if [[ ${#missing_headers[@]} -gt 0 ]]; then
+    echo "  ⚠ missing security headers: ${missing_headers[*]}"
+    echo "    These must be configured at the static host (nginx/Caddy)."
+    echo "    See deploy/nginx-security-headers.conf for the recommended snippet."
+  else
+    echo "  ✓ all 4 security headers present"
+  fi
+fi
+
 if [[ "$DEPLOY_MODE" == "remote" ]]; then
   echo "✓ Deploy complete → $PUBLIC_URL (host: $HOST)"
 else
