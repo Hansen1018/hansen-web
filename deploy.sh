@@ -151,12 +151,12 @@ else
       # listed both, making policy troubleshooting harder).
       missing_directives=()
       if ! printf '%s' "$actual_value" \
-            | grep -qiE "(^|[^a-z-])frame-ancestors[[:space:]]+'none'[[:space:]]*(;|$)"; then
+            | grep -qiE "(^|[[:space:];])frame-ancestors[[:space:]]+'none'[[:space:]]*(;|$)"; then
         weak=1
         missing_directives+=("frame-ancestors 'none'")
       fi
       if ! printf '%s' "$actual_value" \
-            | grep -qiE "(^|[^a-z-])default-src[[:space:]]+'self'[[:space:]]*(;|$)"; then
+            | grep -qiE "(^|[[:space:];])default-src[[:space:]]+'self'[[:space:]]*(;|$)"; then
         weak=1
         missing_directives+=("default-src 'self'")
       fi
@@ -182,7 +182,7 @@ else
   else
     # Success line intentionally reflects partial CSP coverage (only the two
     # critical directives are checked), to avoid overstating verification.
-    echo "  ✓ all 5 security headers present (CSP verified for critical directives)"
+    echo "  ✓ all ${#EXPECTED[@]} security headers present (CSP verified for critical directives)"
   fi
 fi
 
