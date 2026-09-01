@@ -105,17 +105,32 @@ else
   for i in "${!HEADERS[@]}"; do
     header="${HEADERS[$i]}"
     expected_value="${VALUES[$i]}"
-    # Concatenate every matching header line with a space. Some hosts emit
-    # duplicate headers (e.g. multiple CSP lines merged via add_header) and
-    # `head -1` would silently drop the later values.
+    # Concatenate every matching header line. Some hosts emit duplicate
+    # headers (e.g. multiple CSP lines merged via add_header) and `head -1`
+    # would silently drop the later values.
+    #
+    # Separator choice:
+    #   - CSP: '; ' — preserves directive boundaries across merged
+    #     Content-Security-Policy headers (each header line is a separate
+    #     directive; joining with space would lose the ';' that separates
+    #     them, making our boundary-anchored CSP regex produce spurious
+    #     false-positives when 'frame-ancestors '\''none'\'' or
+    #     'default-src '\''self'\'' lands mid-string).
+    #   - other headers: ' ' — single-value semantics; multi-line emission
+    #     is unusual but space-joining is benign.
     # The trailing `|| true` is required: with `set -o pipefail`, a missing
     # header causes grep to exit 1, which would otherwise abort the whole
     # script via `set -e` — defeating the warn-only handler on the next lines.
+    if [[ "$header" == "content-security-policy" ]]; then
+      sep='; '
+    else
+      sep=' '
+    fi
     actual_value=$(printf '%s\n' "$response_headers" \
       | grep -i "^${header}:" \
       | sed -E 's/^[^:]+:[[:space:]]*//; s/[[:space:]]+$//' \
       | tr -d '\r' \
-      | paste -sd ' ' - \
+      | paste -sd "$sep" - \
       || true)
     if [[ -z "$actual_value" ]]; then
       missing_headers+=("$header")
