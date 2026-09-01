@@ -78,7 +78,7 @@ echo "→ Verifying security headers on $PUBLIC_URL..."
 # The trailing `|| true` masks curl/awk non-zero exit so `set -euo pipefail`
 # doesn't abort before the warn-only handler runs (the exact case this
 # check exists to catch).
-response_headers="$(curl -fsSLI --max-time 10 "$PUBLIC_URL/" 2>/dev/null | awk '/^HTTP\// { hdr = $0; body = ""; next } { body = body (body ? "\n" : "") $0 } END { print hdr "\n" body }' || true)"
+response_headers="$(curl -fsSLI --max-time 10 "$PUBLIC_URL/" 2>/dev/null | awk '/^HTTP\// { hdr = $0; body = ""; next } { body = body (body ? "\n" : "") $0 } END { printf "%s\n%s", hdr, body }' || true)"
 if [[ -z "$response_headers" ]]; then
   echo "  ⚠ $PUBLIC_URL unreachable, skipping security-header check"
 else
@@ -144,24 +144,34 @@ else
       #   - default-src 'self'     → followed by ; or end-of-string
       #     (rejects `default-src 'self' https://evil.example`)
       # The boundary-anchored ERE catches both prefixed-junk and
-      # extra-source regressions.
-      for directive_re in \
-            "(^|[^a-z-])frame-ancestors[[:space:]]+'none'[[:space:]]*(;|$)" \
-            "(^|[^a-z-])default-src[[:space:]]+'self'[[:space:]]*(;|$)"; do
-        if ! printf '%s' "$actual_value" | grep -qiE "$directive_re"; then
-          weak=1
-          break
-        fi
-      done
+      # extra-source regressions. Loop unrolled into explicit checks so
+      # the diagnostic message names WHICH directive(s) actually failed
+      # (the previous for-loop broke on first failure but the message
+      # listed both, making policy troubleshooting harder).
+      missing_directives=()
+      if ! printf '%s' "$actual_value" \
+            | grep -qiE "(^|[^a-z-])frame-ancestors[[:space:]]+'none'[[:space:]]*(;|$)"; then
+        weak=1
+        missing_directives+=("frame-ancestors 'none'")
+      fi
+      if ! printf '%s' "$actual_value" \
+            | grep -qiE "(^|[^a-z-])default-src[[:space:]]+'self'[[:space:]]*(;|$)"; then
+        weak=1
+        missing_directives+=("default-src 'self'")
+      fi
       if [[ $weak -eq 1 ]]; then
-        mismatched_headers+=("$header (missing critical directive: frame-ancestors 'none' or default-src 'self')")
+        mismatched_headers+=("$header (missing critical directive: ${missing_directives[*]})")
       fi
     else
       # Case-insensitive compare via POSIX tr (NOT bash's lowercase parameter
       # expansion, which requires Bash 4.0+ and would defeat this script's
       # stated Bash 3.x portability). RFC 7230 §3.2.4 says field-values are
       # case-insensitive; 'X-Frame-Options: deny' and 'X-Frame-Options: DENY'
-      # are equivalent.
+      # are equivalent. Permissions-Policy spec
+      # (https://w3c.github.io/webappsec-permissions-policy/) makes the same
+      # promise for feature identifiers — 'camera', 'Camera', 'CAMERA' all
+      # map to the registered feature 'camera' — so lowercasing is correct
+      # here too and would NOT silently accept an inert typo.
       # Lowercased compare via POSIX tr is authoritative: if actual_lc
       # equals expected_lc we accept the values as case-insensitively
       # equal per RFC 7230 §3.2.4 ('X-Frame-Options: deny' and
