@@ -128,8 +128,8 @@ else
       #     (rejects `frame-ancestors 'none' https://evil.example`)
       #   - default-src 'self'     → followed by ; or end-of-string
       #     (rejects `default-src 'self' https://evil.example`)
-      # The boundary-anchored ERE catches both prefixed-junk (CodeRabbit)
-      # and extra-source regression (OCR other-low finding).
+      # The boundary-anchored ERE catches both prefixed-junk and
+      # extra-source regressions.
       for directive_re in \
             "(^|[^a-z-])frame-ancestors[[:space:]]+'none'[[:space:]]*(;|$)" \
             "(^|[^a-z-])default-src[[:space:]]+'self'[[:space:]]*(;|$)"; do
@@ -141,13 +141,24 @@ else
       if [[ $weak -eq 1 ]]; then
         mismatched_headers+=("$header (missing critical directive: frame-ancestors 'none' or default-src 'self')")
       fi
-    elif [[ "${actual_value,,}" != "${expected_value,,}" ]]; then
-      # bash ${var,,} = lowercase the value. RFC 7230 §3.2.4 says
-      # field-values are case-insensitive; 'X-Frame-Options: deny' and
-      # 'X-Frame-Options: DENY' are equivalent. OCR flagged this as
-      # bug-medium: a perfectly valid host emitting 'deny' (or any
-      # other case variant) was producing a false-positive mismatch.
-      mismatched_headers+=("$header (expected '$expected_value', got '$actual_value')")
+    else
+      # Case-insensitive compare via POSIX tr (NOT bash's lowercase parameter
+      # expansion, which requires Bash 4.0+ and would defeat this script's
+      # stated Bash 3.x portability). RFC 7230 §3.2.4 says field-values are
+      # case-insensitive; 'X-Frame-Options: deny' and 'X-Frame-Options: DENY'
+      # are equivalent.
+      # Lowercased compare via POSIX tr is authoritative: if actual_lc
+      # equals expected_lc we accept the values as case-insensitively
+      # equal per RFC 7230 §3.2.4 ('X-Frame-Options: deny' and
+      # 'X-Frame-Options: DENY' are equivalent). '|| printf …' is the
+      # only fallback — it kicks in only if tr itself fails (very rare:
+      # unsupported locale), in which case we surface the case-sensitive
+      # mismatch as the safer default.
+      actual_lc="$(printf '%s' "$actual_value"   | tr '[:upper:]' '[:lower:]' 2>/dev/null || printf '%s' "$actual_value")"
+      expected_lc="$(printf '%s' "$expected_value" | tr '[:upper:]' '[:lower:]' 2>/dev/null || printf '%s' "$expected_value")"
+      if [[ "$actual_lc" != "$expected_lc" ]]; then
+        mismatched_headers+=("$header (expected '$expected_value', got '$actual_value')")
+      fi
     fi
   done
   if [[ ${#missing_headers[@]} -gt 0 || ${#mismatched_headers[@]} -gt 0 ]]; then
