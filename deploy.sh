@@ -120,7 +120,7 @@ else
     # The trailing `|| true` is required: with `set -o pipefail`, a missing
     # header causes grep to exit 1, which would otherwise abort the whole
     # script via `set -e` — defeating the warn-only handler on the next lines.
-    if [[ "$header" == "content-security-policy" ]]; then
+    if [[ "${header,,}" == "content-security-policy" ]]; then
       sep='; '
     else
       sep=' '
@@ -131,11 +131,11 @@ else
       | sed -E 's/^[^:]+:[[:space:]]*//; s/[[:space:]]+$//' \
       | tr -d '\r' \
       | sort -u \
-      | paste -sd "$sep" - \
+      | { if [[ "$sep" == "; " ]]; then paste -sd ';' - | sed 's/;/; /g'; else paste -sd "$sep" -; fi; } \
       || true)
     if [[ -z "$actual_value" ]]; then
       missing_headers+=("$header")
-    elif [[ "$header" == "content-security-policy" ]]; then
+    elif [[ "${header,,}" == "content-security-policy" ]]; then
       weak=0
       # Both critical directives must appear as standalone directives
       # (not as prefixed junk like "not-frame-ancestors ..." which browsers
