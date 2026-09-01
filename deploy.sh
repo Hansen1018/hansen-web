@@ -56,26 +56,59 @@ if ! curl -fsSI --max-time 10 "$PUBLIC_URL/" >/dev/null 2>&1; then
 fi
 
 # 4. Security-header verification (best-effort: warn only, never block deploy).
-# These four headers used to live in next.config.mjs but Next.js ignores
+# These headers used to live in next.config.mjs but Next.js ignores
 # headers() under output: 'export', so the static host (nginx/Caddy) is
 # responsible. See deploy/nginx-security-headers.conf for the recommended snippet.
+#
+# We verify BOTH presence AND expected value to prevent a misconfigured host
+# from returning success while serving a permissive policy (e.g. an
+# X-Frame-Options: ALLOWALL regression). CSP is checked for two critical
+# directives (frame-ancestors 'none' + default-src 'self') rather than an
+# exact string match, since the policy string is long and directive order
+# may vary across hosts.
 echo "→ Verifying security headers on $PUBLIC_URL..."
 response_headers="$(curl -fsSI --max-time 10 "$PUBLIC_URL/" 2>/dev/null || true)"
 if [[ -z "$response_headers" ]]; then
   echo "  ⚠ $PUBLIC_URL unreachable, skipping security-header check"
 else
+  declare -A EXPECTED_HEADERS=(
+    ["x-content-type-options"]="nosniff"
+    ["x-frame-options"]="DENY"
+    ["referrer-policy"]="strict-origin-when-cross-origin"
+    ["permissions-policy"]="camera=(), microphone=(), geolocation=()"
+    ["content-security-policy"]=""  # checked via critical directives below
+  )
   missing_headers=()
-  for header in content-security-policy x-frame-options referrer-policy permissions-policy; do
-    if ! printf '%s\n' "$response_headers" | grep -qi "^${header}:"; then
+  mismatched_headers=()
+  for header in "${!EXPECTED_HEADERS[@]}"; do
+    expected_value="${EXPECTED_HEADERS[$header]}"
+    actual_value=$(printf '%s\n' "$response_headers" \
+      | grep -i "^${header}:" | head -1 \
+      | sed -E 's/^[^:]+:[[:space:]]*//I' | tr -d '\r')
+    if [[ -z "$actual_value" ]]; then
       missing_headers+=("$header")
+    elif [[ "$header" == "content-security-policy" ]]; then
+      weak=0
+      for directive in "frame-ancestors 'none'" "default-src 'self'"; do
+        if ! printf '%s' "$actual_value" | grep -qF "$directive"; then
+          weak=1
+          break
+        fi
+      done
+      if [[ $weak -eq 1 ]]; then
+        mismatched_headers+=("$header (missing critical directive: frame-ancestors 'none' or default-src 'self')")
+      fi
+    elif [[ "$actual_value" != "$expected_value" ]]; then
+      mismatched_headers+=("$header (expected '$expected_value', got '$actual_value')")
     fi
   done
-  if [[ ${#missing_headers[@]} -gt 0 ]]; then
-    echo "  ⚠ missing security headers: ${missing_headers[*]}"
+  if [[ ${#missing_headers[@]} -gt 0 || ${#mismatched_headers[@]} -gt 0 ]]; then
+    [[ ${#missing_headers[@]} -gt 0 ]] && echo "  ⚠ missing headers: ${missing_headers[*]}"
+    [[ ${#mismatched_headers[@]} -gt 0 ]] && echo "  ⚠ mismatched headers: ${mismatched_headers[*]}"
     echo "    These must be configured at the static host (nginx/Caddy)."
     echo "    See deploy/nginx-security-headers.conf for the recommended snippet."
   else
-    echo "  ✓ all 4 security headers present"
+    echo "  ✓ all 5 security headers present and match expected values"
   fi
 fi
 
