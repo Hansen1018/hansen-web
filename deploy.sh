@@ -68,13 +68,13 @@ fi
 # may vary across hosts.
 echo "→ Verifying security headers on $PUBLIC_URL..."
 # curl -fsSLI follows redirects, so the response can contain multiple
-# HTTP/ blocks (one per redirect hop). Pipe through awk in paragraph mode
-# (RS splits on blank-line separators between blocks) and print the LAST
-# block in END{}, so an intermediate redirect's security headers cannot
-# satisfy validation when the final response is missing them. Without
-# this fix, a redirect chain could yield a silent false positive — a
-# header present only on an intermediate response would still print
-# "all 5 security headers present" even though the final response lacks it.
+# HTTP/ blocks (one per redirect hop). The awk script tracks the LAST
+# ^HTTP/ line and accumulates body from there to EOF: each ^HTTP/ resets
+# the body buffer, so an intermediate redirect's security headers are
+# discarded. Without this fix, a redirect chain could yield a silent
+# false positive — a header present only on an intermediate response would
+# still print "all 5 security headers present" even though the final
+# response lacks it.
 # The trailing `|| true` masks curl/awk non-zero exit so `set -euo pipefail`
 # doesn't abort before the warn-only handler runs (the exact case this
 # check exists to catch).
@@ -113,7 +113,7 @@ else
     # script via `set -e` — defeating the warn-only handler on the next lines.
     actual_value=$(printf '%s\n' "$response_headers" \
       | grep -i "^${header}:" \
-      | sed -E 's/^[^:]+:[[:space:]]*//' \
+      | sed -E 's/^[^:]+:[[:space:]]*//; s/[[:space:]]+$//' \
       | tr -d '\r' \
       | paste -sd ' ' - \
       || true)
@@ -121,24 +121,32 @@ else
       missing_headers+=("$header")
     elif [[ "$header" == "content-security-policy" ]]; then
       weak=0
-      # frame-ancestors 'none' is a single keyword with no possible extra
-      # sources, so a plain substring match is sufficient.
-      if ! printf '%s' "$actual_value" | grep -qiF "frame-ancestors 'none'"; then
-        weak=1
-      fi
-      # default-src 'self' needs a stricter check: the directive must END at
-      # 'self' (followed by ; or end-of-string). A bare substring match
-      # would let `default-src 'self' https://evil.example` slip through
-      # (OCR other-low finding). The ERE anchors the value to the directive
-      # boundary so an appended extra source is correctly caught.
-      if [[ $weak -eq 0 ]] && ! printf '%s' "$actual_value" \
-            | grep -qiE "default-src[[:space:]]+'self'[[:space:]]*(;|$)"; then
-        weak=1
-      fi
+      # Both critical directives must appear as standalone directives
+      # (not as prefixed junk like "not-frame-ancestors ..." which browsers
+      # ignore) and must END at their canonical value:
+      #   - frame-ancestors 'none'  → followed by ; or end-of-string
+      #     (rejects `frame-ancestors 'none' https://evil.example`)
+      #   - default-src 'self'     → followed by ; or end-of-string
+      #     (rejects `default-src 'self' https://evil.example`)
+      # The boundary-anchored ERE catches both prefixed-junk (CodeRabbit)
+      # and extra-source regression (OCR other-low finding).
+      for directive_re in \
+            "(^|[^a-z-])frame-ancestors[[:space:]]+'none'[[:space:]]*(;|$)" \
+            "(^|[^a-z-])default-src[[:space:]]+'self'[[:space:]]*(;|$)"; do
+        if ! printf '%s' "$actual_value" | grep -qiE "$directive_re"; then
+          weak=1
+          break
+        fi
+      done
       if [[ $weak -eq 1 ]]; then
         mismatched_headers+=("$header (missing critical directive: frame-ancestors 'none' or default-src 'self')")
       fi
-    elif [[ "$actual_value" != "$expected_value" ]]; then
+    elif [[ "${actual_value,,}" != "${expected_value,,}" ]]; then
+      # bash ${var,,} = lowercase the value. RFC 7230 §3.2.4 says
+      # field-values are case-insensitive; 'X-Frame-Options: deny' and
+      # 'X-Frame-Options: DENY' are equivalent. OCR flagged this as
+      # bug-medium: a perfectly valid host emitting 'deny' (or any
+      # other case variant) was producing a false-positive mismatch.
       mismatched_headers+=("$header (expected '$expected_value', got '$actual_value')")
     fi
   done
