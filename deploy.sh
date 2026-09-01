@@ -164,22 +164,9 @@ else
         mismatched_headers+=("$header (missing critical directive: ${missing_directives[*]})")
       fi
     else
-      # Case-insensitive compare via POSIX tr (NOT bash's lowercase parameter
-      # expansion, which requires Bash 4.0+ and would defeat this script's
-      # stated Bash 3.x portability). RFC 7230 §3.2.4 says field-values are
-      # case-insensitive; 'X-Frame-Options: deny' and 'X-Frame-Options: DENY'
-      # are equivalent. Permissions-Policy spec
-      # (https://w3c.github.io/webappsec-permissions-policy/) makes the same
-      # promise for feature identifiers — 'camera', 'Camera', 'CAMERA' all
-      # map to the registered feature 'camera' — so lowercasing is correct
-      # here too and would NOT silently accept an inert typo.
-      # Lowercased compare via POSIX tr is authoritative: if actual_lc
-      # equals expected_lc we accept the values as case-insensitively
-      # equal per RFC 7230 §3.2.4 ('X-Frame-Options: deny' and
-      # 'X-Frame-Options: DENY' are equivalent). '|| printf …' is the
-      # only fallback — it kicks in only if tr itself fails (very rare:
-      # unsupported locale), in which case we surface the case-sensitive
-      # mismatch as the safer default.
+      # Case-insensitive compare per RFC 7230 §3.2.4 via POSIX tr (Bash 3.x
+      # portable; ${var,,} requires Bash 4+). '|| printf' is a defensive
+      # fallback for the very-rare case that tr itself fails.
       actual_lc="$(printf '%s' "$actual_value"   | tr '[:upper:]' '[:lower:]' 2>/dev/null || printf '%s' "$actual_value")"
       expected_lc="$(printf '%s' "$expected_value" | tr '[:upper:]' '[:lower:]' 2>/dev/null || printf '%s' "$expected_value")"
       if [[ "$actual_lc" != "$expected_lc" ]]; then
