@@ -67,11 +67,18 @@ fi
 # exact string match, since the policy string is long and directive order
 # may vary across hosts.
 echo "→ Verifying security headers on $PUBLIC_URL..."
-# -L follows redirects so the check sees final-response headers (not redirect
-# response, which typically carries no security headers).
-# `|| true` masks curl's non-zero exit so `set -euo pipefail` doesn't abort
-# before the warn-only handler runs (the exact case this check exists to catch).
-response_headers="$(curl -fsSLI --max-time 10 "$PUBLIC_URL/" 2>/dev/null || true)"
+# curl -fsSLI follows redirects, so the response can contain multiple
+# HTTP/ blocks (one per redirect hop). Pipe through awk in paragraph mode
+# (RS splits on blank-line separators between blocks) and print the LAST
+# block in END{}, so an intermediate redirect's security headers cannot
+# satisfy validation when the final response is missing them. Without
+# this fix, a redirect chain could yield a silent false positive — a
+# header present only on an intermediate response would still print
+# "all 5 security headers present" even though the final response lacks it.
+# The trailing `|| true` masks curl/awk non-zero exit so `set -euo pipefail`
+# doesn't abort before the warn-only handler runs (the exact case this
+# check exists to catch).
+response_headers="$(curl -fsSLI --max-time 10 "$PUBLIC_URL/" 2>/dev/null | awk '/^HTTP\// { hdr = $0; body = ""; next } { body = body (body ? "\n" : "") $0 } END { print hdr "\n" body }' || true)"
 if [[ -z "$response_headers" ]]; then
   echo "  ⚠ $PUBLIC_URL unreachable, skipping security-header check"
 else
@@ -90,7 +97,7 @@ else
     "nosniff"
     "DENY"
     "strict-origin-when-cross-origin"
-    "camera=(), microphone=(), geolocation=()"
+    "camera=(), microphone=(), geolocation()"
     ""
   )
   missing_headers=()
@@ -106,7 +113,7 @@ else
     # script via `set -e` — defeating the warn-only handler on the next lines.
     actual_value=$(printf '%s\n' "$response_headers" \
       | grep -i "^${header}:" \
-      | sed -E 's/^[^:]+:[[:space:]]*//I' \
+      | sed -E 's/^[^:]+:[[:space:]]*//' \
       | tr -d '\r' \
       | paste -sd ' ' - \
       || true)
@@ -114,12 +121,20 @@ else
       missing_headers+=("$header")
     elif [[ "$header" == "content-security-policy" ]]; then
       weak=0
-      for directive in "frame-ancestors 'none'" "default-src 'self'"; do
-        if ! printf '%s' "$actual_value" | grep -qF "$directive"; then
-          weak=1
-          break
-        fi
-      done
+      # frame-ancestors 'none' is a single keyword with no possible extra
+      # sources, so a plain substring match is sufficient.
+      if ! printf '%s' "$actual_value" | grep -qiF "frame-ancestors 'none'"; then
+        weak=1
+      fi
+      # default-src 'self' needs a stricter check: the directive must END at
+      # 'self' (followed by ; or end-of-string). A bare substring match
+      # would let `default-src 'self' https://evil.example` slip through
+      # (OCR other-low finding). The ERE anchors the value to the directive
+      # boundary so an appended extra source is correctly caught.
+      if [[ $weak -eq 0 ]] && ! printf '%s' "$actual_value" \
+            | grep -qiE "default-src[[:space:]]+'self'[[:space:]]*(;|$)"; then
+        weak=1
+      fi
       if [[ $weak -eq 1 ]]; then
         mismatched_headers+=("$header (missing critical directive: frame-ancestors 'none' or default-src 'self')")
       fi
