@@ -1,42 +1,20 @@
 /**
  * @type {import('next').NextConfig}
  *
- * Static export site (output: 'export') — headers set here apply at build time
- * but are typically served by the underlying static host (nginx/Caddy). When
- * the host rewrites/strips headers, surface them via host config instead.
+ * Static export site (output: 'export'). Response headers (CSP, X-Frame-Options,
+ * Referrer-Policy, Permissions-Policy) are NOT applied by Next.js under
+ * output: 'export' — they must be configured at the static host (nginx/Caddy).
+ *
+ * See deploy/nginx-security-headers.conf for the recommended nginx snippet
+ * (the header values match what was previously declared here). deploy.sh
+ * verifies these headers are present on the live site after every deploy and
+ * prints a warning (not an error) if any are missing.
  */
-const securityHeaders = [
-  { key: 'X-Content-Type-Options', value: 'nosniff' },
-  { key: 'X-Frame-Options', value: 'DENY' },
-  { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-  { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
-  {
-    key: 'Content-Security-Policy',
-    value: [
-      "default-src 'self'",
-      "img-src 'self' data: https:",
-      "style-src 'self' 'unsafe-inline'",
-      "script-src 'self' 'unsafe-inline'",
-      "font-src 'self' data:",
-      "connect-src 'self' https://blog.hansendong.top",
-      "frame-ancestors 'none'",
-    ].join('; '),
-  },
-];
-
 const nextConfig = {
   output: 'export',
   images: { unoptimized: true },
   trailingSlash: false,
   reactStrictMode: true,
-  async headers() {
-    return [
-      {
-        source: '/(.*)',
-        headers: securityHeaders,
-      },
-    ];
-  },
 };
 
 export default nextConfig;
