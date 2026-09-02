@@ -160,6 +160,41 @@ else
         weak=1
         missing_directives+=("default-src 'self'")
       fi
+
+      # Verifier (PR #6 CodeRabbit review): connect-src must whitelist both CDN
+      # origins. These are required by Artalk emoji plugin (jsdelivr) and theme
+      # chroma highlight / PhotoSwipe (cdnjs). Without these, the verifier
+      # reports CSP success but emoji/plugin fetches silently fail with
+      # `TypeError: Failed to fetch` in atk-error-layer.
+      #
+      # Token-boundary hardening (PR #6 follow-up review): the regex anchors
+      # BOTH ends to reject false positives in the unsafe direction AND to
+      # accept all valid CSP source expression forms:
+      #   - Leading `connect-src[[:space:]]+` rejects prefix-junk directives
+      #     like `connect-src-extra https://cdn.jsdelivr.net;` (unknown to
+      #     browsers but the previous unanchored match accepted as success).
+      #   - Trailing `([[:space:];/]|$)` rejects lookalike hosts
+      #     (`https://cdn.jsdelivr.net.evil.example`) and prefix-junk
+      #     directives — in both cases the char right after the literal CDN
+      #     hostname is not a valid CSP token boundary. Accepts all three
+      #     valid CSP source forms:
+      #       - origin:        `https://cdn.jsdelivr.net;`          (followed by ;)
+      #       - path-prefix:   `https://cdn.jsdelivr.net/;`         (followed by /)
+      #       - specific file: `https://cdn.jsdelivr.net/foo.js;`   (followed by /)
+      #     and space-separator multi-source directives like
+      #       `connect-src https://cdn.jsdelivr.net https://cdnjs.cloudflare.com;`
+      #     (followed by space).
+      if ! printf '%s' "$actual_value" \
+            | grep -qiE "(^|[[:space:];])connect-src[[:space:]]+[^;]*https://cdn\.jsdelivr\.net([[:space:];/]|$)"; then
+        weak=1
+        missing_directives+=("connect-src with https://cdn.jsdelivr.net")
+      fi
+      if ! printf '%s' "$actual_value" \
+            | grep -qiE "(^|[[:space:];])connect-src[[:space:]]+[^;]*https://cdnjs\.cloudflare\.com([[:space:];/]|$)"; then
+        weak=1
+        missing_directives+=("connect-src with https://cdnjs.cloudflare.com")
+      fi
+
       if [[ $weak -eq 1 ]]; then
         mismatched_headers+=("$header (missing critical directive: ${missing_directives[*]})")
       fi
