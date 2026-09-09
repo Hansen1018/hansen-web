@@ -45,6 +45,26 @@
   --radius-md: 18px;
   --radius-lg: 24px;
   --radius-xl: 32px;
+
+  /* —— Hero scroll pill geometry (shared with page-layout.css) ——
+     The single source of truth for the small scroll-pill bottom gap
+     (32px from hero bottom) and height (38px). page-layout.css's
+     `.below-hero.is-lifted { translateY(-70px) }` and the JS
+     SCROLL_FADE_THRESHOLD in PageContent.tsx must stay consistent
+     with these two values. */
+  --scroll-pill-gap: 32px;
+  --scroll-pill-height: 38px;
+  /* The scrollY threshold at which the hero pill starts fading and
+     BelowHero lifts. Kept as a CSS var so it lives next to the other
+     geometry values; PageContent.tsx reads it via getComputedStyle at
+     mount (single source of truth = this :root block).
+
+     Sync note: the live runtime threshold always comes from this var.
+     SCROLL_FADE_THRESHOLD_FALLBACK in PageContent.tsx is only the
+     SSR / very-old-browser fallback for when this var is missing or
+     getComputedStyle throws — its value MUST match the default here
+     (24px). If you change this default, update the fallback too. */
+  --scroll-fade-threshold: 24px;
 }
 
 /* —— Light mode: override semantic variables + scrollbar + selection —— */

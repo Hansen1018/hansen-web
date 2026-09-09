@@ -1,14 +1,7 @@
 import BackgroundLayer from '@/components/BackgroundLayer'
 import NavController from '@/components/NavController'
 import ThemeToggle from '@/components/ThemeToggle'
-import HeroSection from '@/components/HeroSection'
-import AboutSection from '@/components/AboutSection'
-import ProjectsSection from '@/components/ProjectsSection'
-import SkillsSection from '@/components/SkillsSection'
-import BlogSection from '@/components/BlogSection'
-import TimelineSection from '@/components/TimelineSection'
-import SideHustleSection from '@/components/SideHustleSection'
-import ContactSection from '@/components/ContactSection'
+import PageContent from '@/components/PageContent'
 
 export default function HomePage() {
   return (
@@ -17,14 +10,7 @@ export default function HomePage() {
       <NavController />
       <ThemeToggle />
       <main className="page">
-        <HeroSection />
-        <AboutSection />
-        <ProjectsSection />
-        <SkillsSection />
-        <BlogSection />
-        <TimelineSection />
-        <SideHustleSection />
-        <ContactSection />
+        <PageContent />
       </main>
     </>
   )

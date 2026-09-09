@@ -236,9 +236,6 @@
 
 @keyframes caret-blink { 50% { opacity: 0; } }
 
-@media (prefers-reduced-motion: reduce) {
-  .hero__name-caret { animation: none; }
-}
 
 .hero__hi {
   font-size: clamp(14px, 1.6vw, 16px);
@@ -326,19 +323,27 @@
 
 .hero__scroll {
   position: absolute;
-  bottom: 32px;
+  bottom: var(--scroll-pill-gap, 32px);
   left: 50%;
   transform: translateX(-50%);
   width: 22px;
-  height: 38px;
+  height: var(--scroll-pill-height, 38px);
   border: 1.5px solid var(--line-strong);
   border-radius: 999px;
   display: grid;
   place-items: start center;
   padding-top: 6px;
-  transition: border-color 0.3s ease;
+  /* border-color: hover; opacity: scroll-fade. Same .7s curve used by
+     .fade-up so any nearby section fade-in lines up smoothly. */
+  transition:
+    border-color 0.3s ease,
+    opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .hero__scroll:hover { border-color: var(--ink-2); }
+.hero__scroll.is-faded {
+  opacity: 0;
+  pointer-events: none;
+}
 .hero__scroll-line {
   width: 1.5px;
   height: 8px;
@@ -346,6 +351,19 @@
   border-radius: 2px;
   animation: scroll-line 1.8s ease-in-out infinite;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .hero__name-caret { animation: none; }
+  /* Skip the pill's 0.7s opacity transition — the fade itself is short
+     and subtle, but a 700ms cross-fade can still feel like motion for
+     reduced-motion users. Snapping to opacity:0 is closer to "no
+     animation" than a slow fade. */
+  .hero__scroll { transition: none; }
+  /* Stop the pill's inner bounce — it runs an infinite 1.8s cycle that
+     would otherwise keep going under reduced-motion. */
+  .hero__scroll-line { animation: none; }
+}
+
 @keyframes scroll-line {
   0%   { transform: translateY(0); opacity: 1; }
   100% { transform: translateY(10px); opacity: 0; }

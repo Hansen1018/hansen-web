@@ -1,0 +1,48 @@
+/* —— below-hero lift —— */
+/* Slide the entire AboutSection+block up so its top lands at the same
+   viewport y as the hero scroll pill's top was the moment scrollY crossed
+   24 (mouse top = hero bottom - 32px gap - 38px height = 70px above the
+   hero bottom edge). SectionShell still owns its own IntersectionObserver
+   fade-in - this transform only repositions, no opacity change.
+
+   The 70px is --scroll-pill-gap (32px) + --scroll-pill-height (38px)
+   from globals.css :root. We hard-code -70px here to avoid a PostCSS
+   parse issue with `calc(-1 * var(--scroll-pill-total))` in Next.js 16
+   Turbopack; if --scroll-pill-total changes in globals.css, edit this
+   number too. */
+
+.below-hero {
+  transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* No `will-change: transform` here on purpose: this class stays applied
+   for the entire time scrollY > --scroll-fade-threshold (i.e. nearly the
+   whole page scroll), so pinning a compositor layer for the 7-section
+   subtree would defeat the purpose. The 0.7s transition is short enough
+   that the browser can promote on demand.
+
+   `margin-bottom: -70px` cancels the visual shift in document flow -
+   transform doesn't affect layout height, so without this the last
+   section would stop 70px short of the viewport bottom when the user
+   reaches the document end. */
+.below-hero.is-lifted {
+  /* Both values reference --scroll-pill-total (globals.css :root = 70px).
+     Single-value form avoids the PostCSS Turbopack parse issue that
+     `calc(-1 * (var + var))` triggers — only the single-var form here. */
+  transform: translateY(-70px);
+  margin-bottom: -70px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .below-hero {
+    transition: none;
+  }
+  /* Under reduced-motion, drop BOTH the visual shift AND the layout
+     shrink that was cancelling it. Otherwise the document bottom is
+     shortened 70px while the sections aren't lifted, leaving a gap at
+     the page end. */
+  .below-hero.is-lifted {
+    transform: none;
+    margin-bottom: 0;
+  }
+}

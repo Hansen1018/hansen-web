@@ -22,7 +22,11 @@ const AVATAR_SIZE = 460
  * HeroSection — first screen: avatar / social / status chips / typewriter name / CTA / scroll indicator.
  * Typewriter loops profile.name, controlled by type/delete state machine.
  */
-export default function HeroSection() {
+interface HeroSectionProps {
+  scrollFaded?: boolean
+}
+
+export default function HeroSection({ scrollFaded = false }: HeroSectionProps) {
   const [typed, setTyped] = useState('')
   const [imgErr, setImgErr] = useState(false)
   const word = profile.name
@@ -191,7 +195,7 @@ export default function HeroSection() {
         </div>
       </div>
 
-      <a href="#about" className="hero__scroll" aria-label="向下滚动">
+      <a href="#about" className={`hero__scroll${scrollFaded ? ' is-faded' : ''}`} aria-label="向下滚动" aria-hidden={scrollFaded || undefined} tabIndex={scrollFaded ? -1 : undefined}>
         <span className="hero__scroll-line" aria-hidden="true"></span>
       </a>
     </section>
