@@ -22,7 +22,11 @@ const AVATAR_SIZE = 460
  * HeroSection — first screen: avatar / social / status chips / typewriter name / CTA / scroll indicator.
  * Typewriter loops profile.name, controlled by type/delete state machine.
  */
-export default function HeroSection({ scrollFaded = false }: { scrollFaded?: boolean }) {
+interface HeroSectionProps {
+  scrollFaded?: boolean
+}
+
+export default function HeroSection({ scrollFaded = false }: HeroSectionProps) {
   const [typed, setTyped] = useState('')
   const [imgErr, setImgErr] = useState(false)
   const word = profile.name

@@ -32,6 +32,9 @@ import ContactSection from './ContactSection'
  */
 // SSR / missing-var fallback for the --scroll-fade-threshold read in the
 // layout effect below. JSDoc above describes the single source of truth.
+// IMPORTANT: keep this numeric value in sync with the --scroll-fade-threshold
+// default in src/app/globals.css :root. The two diverge by design only in
+// the SSR / very-old-browser path; the live runtime value always wins.
 const SCROLL_FADE_THRESHOLD_FALLBACK = 24
 
 export default function PageContent() {
