@@ -7,10 +7,13 @@
 
 .below-hero {
   transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: transform;
 }
+/* Promote to its own compositor layer only while the transform is active.
+   Keeping it always-on would pin a layer for the entire AboutSection+
+   subtree (7 sections) for no reason during the page's idle state. */
 .below-hero.is-lifted {
   transform: translateY(-70px);
+  will-change: transform;
 }
 
 @media (prefers-reduced-motion: reduce) {

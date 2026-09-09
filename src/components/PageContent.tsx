@@ -18,15 +18,13 @@ import ContactSection from './ContactSection'
  * moment scrollY crossed 24. SectionShell still owns its own
  * IntersectionObserver fade-in for every section below the hero — this
  * wrapper only repositions them, never hides them.
- */
-/**
- * Single source of truth for the scrollY threshold that toggles
- * `.hero__scroll.is-faded` and `.below-hero.is-lifted`. Kept as a JS
- * constant (not a CSS token) because the threshold is a runtime pixel
- * value the scroll listener compares against `window.scrollY`. The CSS
- * geometry it gates — pill height (38px) + bottom gap (32px) = 70px
- * lift in `page-layout.css` — is documented in `page-layout.css`'s
- * header comment.
+ *
+ * Cross-file geometry contract — keep in sync:
+ *   - SCROLL_FADE_THRESHOLD (this file) — runtime pixel value the scroll
+ *     listener compares against window.scrollY.
+ *   - pill height 38px + bottom gap 32px = 70px lift in `page-layout.css`.
+ *   - .hero__scroll opacity .7s cubic-bezier(.22,1,.36,1) in
+ *     `hero-section.css` (same curve as the transform).
  */
 const SCROLL_FADE_THRESHOLD = 24
 
@@ -34,10 +32,18 @@ export default function PageContent() {
   const [scrollFaded, setScrollFaded] = useState(false)
 
   useEffect(() => {
-    const onScroll = () => setScrollFaded(window.scrollY > SCROLL_FADE_THRESHOLD)
-    onScroll()
+    let rafId: number | null = null
+    const apply = (faded: boolean) => {
+      if (rafId !== null) cancelAnimationFrame(rafId)
+      rafId = requestAnimationFrame(() => setScrollFaded(faded))
+    }
+    const onScroll = () => apply(window.scrollY > SCROLL_FADE_THRESHOLD)
+    apply(window.scrollY > SCROLL_FADE_THRESHOLD)
     window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
+    return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId)
+      window.removeEventListener('scroll', onScroll)
+    }
   }, [])
 
   return (
