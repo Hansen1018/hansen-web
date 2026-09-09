@@ -54,6 +54,12 @@
      with these two values. */
   --scroll-pill-gap: 32px;
   --scroll-pill-height: 38px;
+  /* Combined pill vertical extent (gap + height). Used by
+     page-layout.css for the .below-hero.is-lifted translateY +
+     margin-bottom so the visual shift and the layout shrink cancel
+     exactly. Single value here (not calc()) because Next.js 16 Turbopack's
+     PostCSS transform was choking on nested calc(-1 * (var + var)). */
+  --scroll-pill-total: 70px;
   /* The scrollY threshold at which the hero pill starts fading and
      BelowHero lifts. Kept as a CSS var so it lives next to the other
      geometry values; PageContent.tsx reads it via getComputedStyle at

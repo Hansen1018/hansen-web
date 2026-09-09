@@ -1,39 +1,39 @@
 /* —— below-hero lift —— */
-/* Slide the entire AboutSection+ block up so its top lands at the same
+/* Slide the entire AboutSection+block up so its top lands at the same
    viewport y as the hero scroll pill's top was the moment scrollY crossed
-   24 (mouse top = hero_bottom - 32px gap - 38px height = 70px above the
+   24 (mouse top = hero bottom - 32px gap - 38px height = 70px above the
    hero bottom edge). SectionShell still owns its own IntersectionObserver
-   fade-in — this transform only repositions, no opacity change. */
+   fade-in - this transform only repositions, no opacity change.
+
+   The 70px is --scroll-pill-gap (32px) + --scroll-pill-height (38px)
+   from globals.css :root. We hard-code -70px here to avoid a PostCSS
+   parse issue with `calc(-1 * var(--scroll-pill-total))` in Next.js 16
+   Turbopack; if --scroll-pill-total changes in globals.css, edit this
+   number too. */
 
 .below-hero {
   transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
 }
-/* Promote to its own compositor layer only while the transform is active.
-   Keeping it always-on would pin a layer for the entire AboutSection+
-   subtree (7 sections) for no reason during the page's idle state. */
-.below-hero.is-lifted {
-  /* Same source of truth as .hero__scroll (hero-section.css) and
-     SCROLL_FADE_THRESHOLD (PageContent.tsx) — the 70px here is
-     --scroll-pill-gap (32px) + --scroll-pill-height (38px). Edit the
-     vars in globals.css :root and this follows.
 
-     No `will-change: transform` here on purpose: this class stays
-     applied for the entire time scrollY > --scroll-fade-threshold
-     (i.e. nearly the whole page scroll), so pinning a compositor layer
-     for the 7-section subtree would defeat the purpose. The 0.7s
-     transition is short enough that the browser can promote on demand. */
-  transform: translateY(calc(-1 * (var(--scroll-pill-gap, 32px) + var(--scroll-pill-height, 38px))));
+/* No `will-change: transform` here on purpose: this class stays applied
+   for the entire time scrollY > --scroll-fade-threshold (i.e. nearly the
+   whole page scroll), so pinning a compositor layer for the 7-section
+   subtree would defeat the purpose. The 0.7s transition is short enough
+   that the browser can promote on demand.
+
+   `margin-bottom: -70px` cancels the visual shift in document flow -
+   transform doesn't affect layout height, so without this the last
+   section would stop 70px short of the viewport bottom when the user
+   reaches the document end. */
+.below-hero.is-lifted {
+  transform: translateY(-70px);
+  margin-bottom: -70px;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .below-hero {
     transition: none;
   }
-  /* Snap behaviour (`transition: none` above) is itself motion. Drop
-     the transform too so the About+ block stays put when scrollY
-     crosses the threshold — reduced-motion users keep the hero pill
-     fade (handled in hero-section.css) but no longer see the 70px
-     jump. */
   .below-hero.is-lifted {
     transform: none;
   }

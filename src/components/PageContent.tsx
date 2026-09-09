@@ -52,8 +52,15 @@ export default function PageContent() {
     )
     const threshold = Number.isFinite(raw) ? raw : SCROLL_FADE_THRESHOLD_FALLBACK
 
+    // Initial state is set SYNCHRONOUSLY (no rAF) so it's committed before
+    // the browser paints — the whole point of using useLayoutEffect here.
+    // The rAF path is reserved for scroll-event updates, where the frame
+    // is already in flight and a one-frame debounce costs nothing.
+    const initial = window.scrollY > threshold
+    setScrollFaded(initial)
+    let lastFaded = initial
+
     let rafId: number | null = null
-    let lastFaded = false
     const apply = (faded: boolean) => {
       if (faded === lastFaded) return
       lastFaded = faded
@@ -61,7 +68,6 @@ export default function PageContent() {
       rafId = requestAnimationFrame(() => setScrollFaded(faded))
     }
     const onScroll = () => apply(window.scrollY > threshold)
-    apply(window.scrollY > threshold)
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => {
       if (rafId !== null) cancelAnimationFrame(rafId)

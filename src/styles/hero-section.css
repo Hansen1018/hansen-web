@@ -351,6 +351,9 @@
      reduced-motion users. Snapping to opacity:0 is closer to "no
      animation" than a slow fade. */
   .hero__scroll { transition: none; }
+  /* Stop the pill's inner bounce — it runs an infinite 1.8s cycle that
+     would otherwise keep going under reduced-motion. */
+  .hero__scroll-line { animation: none; }
 }
 .hero__scroll-line {
   width: 1.5px;
