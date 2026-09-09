@@ -336,9 +336,17 @@
   display: grid;
   place-items: start center;
   padding-top: 6px;
-  transition: border-color 0.3s ease;
+  /* border-color: hover; opacity: scroll-fade. Same .7s curve used by
+     .fade-up so any nearby section fade-in lines up smoothly. */
+  transition:
+    border-color 0.3s ease,
+    opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .hero__scroll:hover { border-color: var(--ink-2); }
+.hero__scroll.is-faded {
+  opacity: 0;
+  pointer-events: none;
+}
 .hero__scroll-line {
   width: 1.5px;
   height: 8px;

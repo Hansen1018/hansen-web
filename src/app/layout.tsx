@@ -12,6 +12,7 @@ import '../styles/blog-section.css'
 import '../styles/timeline-section.css'
 import '../styles/side-hustle-section.css'
 import '../styles/contact-section.css'
+import '../styles/page-layout.css'
 import '../styles/theme-toggle.css'
 import '../styles/utilities.css'
 
