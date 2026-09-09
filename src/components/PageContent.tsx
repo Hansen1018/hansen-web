@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useLayoutEffect, useState } from 'react'
 import HeroSection from './HeroSection'
 import AboutSection from './AboutSection'
 import ProjectsSection from './ProjectsSection'
@@ -31,9 +31,15 @@ const SCROLL_FADE_THRESHOLD = 24
 export default function PageContent() {
   const [scrollFaded, setScrollFaded] = useState(false)
 
-  useEffect(() => {
+  // useLayoutEffect (not useEffect) so the initial scrollY check runs BEFORE
+  // the first paint — avoids a one-frame flash on browser scroll restoration
+  // or in-page anchor navigation where scrollY > 24 at mount.
+  useLayoutEffect(() => {
     let rafId: number | null = null
+    let lastFaded = false
     const apply = (faded: boolean) => {
+      if (faded === lastFaded) return
+      lastFaded = faded
       if (rafId !== null) cancelAnimationFrame(rafId)
       rafId = requestAnimationFrame(() => setScrollFaded(faded))
     }

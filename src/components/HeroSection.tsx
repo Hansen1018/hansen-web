@@ -191,13 +191,7 @@ export default function HeroSection({ scrollFaded = false }: { scrollFaded?: boo
         </div>
       </div>
 
-      <a
-          href="#about"
-          className={`hero__scroll${scrollFaded ? " is-faded" : ""}`}
-          aria-label="向下滚动"
-          aria-hidden={scrollFaded || undefined}
-          tabIndex={scrollFaded ? -1 : undefined}
-        >
+      <a href="#about" className={`hero__scroll${scrollFaded ? ' is-faded' : ''}`} aria-label="向下滚动" aria-hidden={scrollFaded || undefined} tabIndex={scrollFaded ? -1 : undefined}>
         <span className="hero__scroll-line" aria-hidden="true"></span>
       </a>
     </section>
