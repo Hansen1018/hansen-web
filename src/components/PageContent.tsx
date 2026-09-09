@@ -50,7 +50,12 @@ export default function PageContent() {
     const raw = parseFloat(
       getComputedStyle(document.documentElement).getPropertyValue('--scroll-fade-threshold'),
     )
-    const threshold = Number.isFinite(raw) ? raw : SCROLL_FADE_THRESHOLD_FALLBACK
+    // getComputedStyle returns the resolved length in px (e.g. "24px"), but
+    // the var could be misconfigured to "" (missing), a non-numeric token,
+    // or a non-positive value (zero / negative) that has no semantic meaning
+    // here. Fall back to the SSR-safe constant in those cases — see
+    // SCROLL_FADE_THRESHOLD_FALLBACK jsdoc above for the cross-file sync note.
+    const threshold = Number.isFinite(raw) && raw > 0 ? raw : SCROLL_FADE_THRESHOLD_FALLBACK
 
     // Initial state is set SYNCHRONOUSLY (no rAF) so it's committed
     // before the browser paints — the whole point of using useLayoutEffect here.
