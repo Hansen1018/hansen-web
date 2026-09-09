@@ -49,10 +49,8 @@ export default function PageContent() {
     )
     const threshold = Number.isFinite(raw) ? raw : SCROLL_FADE_THRESHOLD_FALLBACK
 
-    // Initial state is set SYNCHRONOUSLY (no rAF) so it
-    // the browser paints — the whole point of using useLayoutEffect here.
-    // The rAF path (below) coalesces scroll events — at most one frame in
-    // flight, sampling the latest scrollY once per frame instead of bouncing
+    // Initial state is set SYNCHRONOUSLY (no rAF) so it's committed
+    // before the browser paints — the whole point of using useLayoutEffect here.
     const initial = window.scrollY > threshold
     setScrollFaded(initial)
 
