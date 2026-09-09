@@ -54,6 +54,11 @@
      with these two values. */
   --scroll-pill-gap: 32px;
   --scroll-pill-height: 38px;
+  /* The scrollY threshold at which the hero pill starts fading and
+     BelowHero lifts. Kept as a CSS var so it lives next to the other
+     geometry values; PageContent.tsx reads it via getComputedStyle at
+     mount (single source of truth = this :root block). */
+  --scroll-fade-threshold: 24px;
 }
 
 /* —— Light mode: override semantic variables + scrollbar + selection —— */

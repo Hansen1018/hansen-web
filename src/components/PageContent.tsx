@@ -24,20 +24,34 @@ import ContactSection from './ContactSection'
  *   - --scroll-pill-gap (32px) + --scroll-pill-height (38px) consumed by
  *     .hero__scroll (hero-section.css) and .below-hero.is-lifted
  *     (page-layout.css) via var().
- *   - SCROLL_FADE_THRESHOLD (this file) is a JS constant — it has to be,
- *     since it's compared against window.scrollY at runtime.
+ *   - --scroll-fade-threshold (24px) read here via getComputedStyle in
+ *     the layout effect below; SCROLL_FADE_THRESHOLD_FALLBACK covers
+ *     SSR + missing var.
  *   - .hero__scroll opacity .7s cubic-bezier(.22,1,.36,1) in
  *     `hero-section.css` (same curve as the transform).
  */
-const SCROLL_FADE_THRESHOLD = 24
+// Single source of truth for the threshold is --scroll-fade-threshold
+// in src/app/globals.css :root. SCROLL_FADE_THRESHOLD_PX is read via
+// getComputedStyle in the layout effect below so changes to the CSS var
+// flow through without touching this file. The 24 fallback covers SSR
+// (no window) and a missing/malformed var.
+const SCROLL_FADE_THRESHOLD_FALLBACK = 24
 
 export default function PageContent() {
   const [scrollFaded, setScrollFaded] = useState(false)
 
   // useLayoutEffect (not useEffect) so the initial scrollY check runs BEFORE
   // the first paint — avoids a one-frame flash on browser scroll restoration
-  // or in-page anchor navigation where scrollY > 24 at mount.
+  // or in-page anchor navigation where scrollY > threshold at mount.
   useLayoutEffect(() => {
+    // Read the threshold from the CSS var so the JS follows globals.css.
+    // Fall back to the SSR-safe constant if the var is missing or
+    // getComputedStyle throws (very old browsers).
+    const raw = parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue('--scroll-fade-threshold'),
+    )
+    const threshold = Number.isFinite(raw) ? raw : SCROLL_FADE_THRESHOLD_FALLBACK
+
     let rafId: number | null = null
     let lastFaded = false
     const apply = (faded: boolean) => {
@@ -46,8 +60,8 @@ export default function PageContent() {
       if (rafId !== null) cancelAnimationFrame(rafId)
       rafId = requestAnimationFrame(() => setScrollFaded(faded))
     }
-    const onScroll = () => apply(window.scrollY > SCROLL_FADE_THRESHOLD)
-    apply(window.scrollY > SCROLL_FADE_THRESHOLD)
+    const onScroll = () => apply(window.scrollY > threshold)
+    apply(window.scrollY > threshold)
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => {
       if (rafId !== null) cancelAnimationFrame(rafId)

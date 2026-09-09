@@ -15,9 +15,14 @@
   /* Same source of truth as .hero__scroll (hero-section.css) and
      SCROLL_FADE_THRESHOLD (PageContent.tsx) — the 70px here is
      --scroll-pill-gap (32px) + --scroll-pill-height (38px). Edit the
-     vars in globals.css :root and this follows. */
+     vars in globals.css :root and this follows.
+
+     No `will-change: transform` here on purpose: this class stays
+     applied for the entire time scrollY > --scroll-fade-threshold
+     (i.e. nearly the whole page scroll), so pinning a compositor layer
+     for the 7-section subtree would defeat the purpose. The 0.7s
+     transition is short enough that the browser can promote on demand. */
   transform: translateY(calc(-1 * (var(--scroll-pill-gap, 32px) + var(--scroll-pill-height, 38px))));
-  will-change: transform;
 }
 
 @media (prefers-reduced-motion: reduce) {
