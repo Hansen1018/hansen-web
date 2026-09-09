@@ -238,6 +238,11 @@
 
 @media (prefers-reduced-motion: reduce) {
   .hero__name-caret { animation: none; }
+  /* Skip the pill's 0.7s opacity transition — the fade itself is short
+     and subtle, but a 700ms cross-fade can still feel like motion for
+     reduced-motion users. Snapping to opacity:0 is closer to "no
+     animation" than a slow fade. */
+  .hero__scroll { transition: none; }
 }
 
 .hero__hi {

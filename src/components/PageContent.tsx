@@ -19,11 +19,22 @@ import ContactSection from './ContactSection'
  * IntersectionObserver fade-in for every section below the hero — this
  * wrapper only repositions them, never hides them.
  */
+/**
+ * Single source of truth for the scrollY threshold that toggles
+ * `.hero__scroll.is-faded` and `.below-hero.is-lifted`. Kept as a JS
+ * constant (not a CSS token) because the threshold is a runtime pixel
+ * value the scroll listener compares against `window.scrollY`. The CSS
+ * geometry it gates — pill height (38px) + bottom gap (32px) = 70px
+ * lift in `page-layout.css` — is documented in `page-layout.css`'s
+ * header comment.
+ */
+const SCROLL_FADE_THRESHOLD = 24
+
 export default function PageContent() {
   const [scrollFaded, setScrollFaded] = useState(false)
 
   useEffect(() => {
-    const onScroll = () => setScrollFaded(window.scrollY > 24)
+    const onScroll = () => setScrollFaded(window.scrollY > SCROLL_FADE_THRESHOLD)
     onScroll()
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)

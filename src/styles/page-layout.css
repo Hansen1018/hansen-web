@@ -17,4 +17,12 @@
   .below-hero {
     transition: none;
   }
+  /* Snap behaviour (`transition: none` above) is itself motion. Drop
+     the transform too so the About+ block stays put when scrollY
+     crosses the threshold — reduced-motion users keep the hero pill
+     fade (handled in hero-section.css) but no longer see the 70px
+     jump. */
+  .below-hero.is-lifted {
+    transform: none;
+  }
 }
