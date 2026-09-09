@@ -57,7 +57,13 @@
   /* The scrollY threshold at which the hero pill starts fading and
      BelowHero lifts. Kept as a CSS var so it lives next to the other
      geometry values; PageContent.tsx reads it via getComputedStyle at
-     mount (single source of truth = this :root block). */
+     mount (single source of truth = this :root block).
+
+     Sync note: the live runtime threshold always comes from this var.
+     SCROLL_FADE_THRESHOLD_FALLBACK in PageContent.tsx is only the
+     SSR / very-old-browser fallback for when this var is missing or
+     getComputedStyle throws — its value MUST match the default here
+     (24px). If you change this default, update the fallback too. */
   --scroll-fade-threshold: 24px;
 }
 
