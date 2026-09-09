@@ -26,6 +26,9 @@
    section would stop 70px short of the viewport bottom when the user
    reaches the document end. */
 .below-hero.is-lifted {
+  /* Both values reference --scroll-pill-total (globals.css :root = 70px).
+     Single-value form avoids the PostCSS Turbopack parse issue that
+     `calc(-1 * (var + var))` triggers — only the single-var form here. */
   transform: translateY(-70px);
   margin-bottom: -70px;
 }
@@ -34,7 +37,12 @@
   .below-hero {
     transition: none;
   }
+  /* Under reduced-motion, drop BOTH the visual shift AND the layout
+     shrink that was cancelling it. Otherwise the document bottom is
+     shortened 70px while the sections aren't lifted, leaving a gap at
+     the page end. */
   .below-hero.is-lifted {
     transform: none;
+    margin-bottom: 0;
   }
 }

@@ -30,11 +30,8 @@ import ContactSection from './ContactSection'
  *   - .hero__scroll opacity .7s cubic-bezier(.22,1,.36,1) in
  *     `hero-section.css` (same curve as the transform).
  */
-// Single source of truth for the threshold is --scroll-fade-threshold
-// in src/app/globals.css :root. SCROLL_FADE_THRESHOLD_PX is read via
-// getComputedStyle in the layout effect below so changes to the CSS var
-// flow through without touching this file. The 24 fallback covers SSR
-// (no window) and a missing/malformed var.
+// SSR / missing-var fallback for the --scroll-fade-threshold read in the
+// layout effect below. JSDoc above describes the single source of truth.
 const SCROLL_FADE_THRESHOLD_FALLBACK = 24
 
 export default function PageContent() {
@@ -52,22 +49,26 @@ export default function PageContent() {
     )
     const threshold = Number.isFinite(raw) ? raw : SCROLL_FADE_THRESHOLD_FALLBACK
 
-    // Initial state is set SYNCHRONOUSLY (no rAF) so it's committed before
+    // Initial state is set SYNCHRONOUSLY (no rAF) so it
     // the browser paints — the whole point of using useLayoutEffect here.
-    // The rAF path is reserved for scroll-event updates, where the frame
-    // is already in flight and a one-frame debounce costs nothing.
+    // The rAF path (below) coalesces scroll events — at most one frame in
+    // flight, sampling the latest scrollY once per frame instead of bouncing
     const initial = window.scrollY > threshold
     setScrollFaded(initial)
-    let lastFaded = initial
 
+    // Coalesce scroll events into a single rAF: rapid scrolling schedules
+    // one frame at a time, and the rAF callback reads the latest
+    // scrollY (not the value that was current when the event fired).
+    // This stops scrollFaded from lagging behind during continuous
+    // scrolling without re-rendering more than once per frame.
     let rafId: number | null = null
-    const apply = (faded: boolean) => {
-      if (faded === lastFaded) return
-      lastFaded = faded
-      if (rafId !== null) cancelAnimationFrame(rafId)
-      rafId = requestAnimationFrame(() => setScrollFaded(faded))
+    const onScroll = () => {
+      if (rafId !== null) return
+      rafId = requestAnimationFrame(() => {
+        rafId = null
+        setScrollFaded(window.scrollY > threshold)
+      })
     }
-    const onScroll = () => apply(window.scrollY > threshold)
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => {
       if (rafId !== null) cancelAnimationFrame(rafId)
