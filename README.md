@@ -27,11 +27,12 @@ Mobile menu drawer:
 ## Features
 
 - **Next.js App Router** with `output: 'export'` — pure static site, zero runtime cost
-- **React** server components by default; only 7 of 14 components ship client JS
+- **React** server components by default; only 8 of 15 components ship client JS
 - **TypeScript strict** — full type safety on data, hooks, components
 - **Glassmorphism + aurora background** — three drifting radial blobs, grain noise overlay, glass cards with `backdrop-filter`
 - **Scroll-spy** — single `IntersectionObserver` powers both `SideNav` (desktop) and `MobileMenu` (mobile) via `NavController`
 - **Hero typewriter** — `type → pause → delete` state machine with `prefers-reduced-motion` guard
+- **Scroll-driven hero pill fade-out + below-hero layout lift** — `PageContent` owns a single `useLayoutEffect`-installed scroll listener; reads `--scroll-fade-threshold` (CSS var in `globals.css :root`) and toggles `.is-faded` on `.hero__scroll` (opacity 0 + `pointer-events: none` + `tabIndex={-1}`) and `.is-lifted` on `.below-hero` (`translateY(-70px)` + matching `margin-bottom` to cancel the layout shift). rAF-coalesced (1 `setState` per frame). Per-file `prefers-reduced-motion` handling: snap pill opacity, stop pill bounce, reset transform + margin-bottom.
 - **Live blog feed** — client-side `fetch()` to `https://blog.hansendong.top/index.json` with `cache: "no-store"`; 5 min poll + `visibilitychange` refresh. No build-time sync.
 - **Open Graph + JSON-LD** — full metadata API: `Person` + `WebSite` + `WebPage` structured data
 - **Mobile-first responsive** — breakpoints at 640 / 720 / 900 / 1180 px
@@ -47,13 +48,16 @@ Mobile menu drawer:
 | Image generation | `sharp` (SVG → PNG for `og.png`) | — |
 | Blog feed | Hugo `index.json` (live fetch, CORS-enabled) | — |
 | Deploy | `rsync` → `/var/www/hansen-web/` | — |
+| Testing | vitest + @testing-library/react + jsdom | 5.0 / 16 |
 
 ## Quick Start
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173
-npm run build      # outputs to out/
+npm run dev          # http://localhost:5173
+npm run build        # outputs to out/
+npm test             # vitest run (component tests in tests/components/)
+npm run type-check   # tsc --noEmit
 ```
 
 `npm run build` runs one prebuild step first:
@@ -66,67 +70,80 @@ prebuild
 ## Project Structure
 
 ```
-hansen-web-next/
+hansen-web/
 ├── package.json
-├── next.config.mjs        # output: 'export' + images.unoptimized + CSP/XFO headers
-├── tsconfig.json          # strict mode, @/* path alias
-├── deploy.sh              # atomic replace + rsync + post-deploy healthcheck
-├── public/                # favicon, og.svg (post-build)
-├── screenshots/           # README preview images (desktop / mobile)
+├── next.config.mjs            # output: 'export' + images.unoptimized
+├── tsconfig.json              # strict mode, @/* path alias
+├── vitest.config.ts           # jsdom env, alias @ → ./src, setup file
+├── deploy.sh                  # atomic replace + rsync + post-deploy healthcheck
+├── public/                    # favicon, og.svg (post-build)
+├── screenshots/               # README preview images (desktop / mobile)
 ├── scripts/
-│   ├── gen-og.mjs         # SVG → PNG
+│   ├── gen-og.mjs             # SVG → PNG (prebuild hook)
 │   ├── capture-previews.mjs
 │   ├── audit-cyan-light.mjs   # WCAG cyan-contrast audit
-│   └── verify-*.mjs       # sidenav + computed-style verification
-└── src/
-    ├── app/
-    │   ├── layout.tsx     # metadata + JSON-LD
-    │   ├── page.tsx       # composes all sections
-    │   └── globals.css    # CSS variables + reset
-    ├── components/
-    │   ├── NavController.tsx       # client — scroll-spy hub
-    │   ├── SideNav.tsx             # server — presentational
-    │   ├── MobileMenu.tsx          # client — drawer + body scroll lock
-    │   ├── SectionShell.tsx        # client — IntersectionObserver fade-in
-    │   ├── BackgroundLayer.tsx     # server — pure CSS animation
-    │   ├── HeroSection.tsx         # client — typewriter
-    │   ├── AboutSection.tsx        # server — presentational
-    │   ├── ProjectsSection.tsx     # client — onError handler
-    │   ├── SkillsSection.tsx       # server — presentational
-    │   ├── BlogSection.tsx         # client — fetch on mount
-    │   ├── TimelineSection.tsx     # server — presentational
-    │   ├── SideHustleSection.tsx   # server — presentational
-    │   ├── ContactSection.tsx      # server — presentational
-    │   ├── ThemeToggle.tsx         # client — data-theme + localStorage
-    │   └── socialIcons.ts          # shared SVG paths
-    ├── data/
-    │   └── profile/                # all content, split into per-section files
-    │       ├── index.ts            # Profile interface + top-level fields + socials + navSections + aggregator
-    │       ├── about.ts            # {intro, paragraphs, highlights}
-    │       ├── projects.ts         # Project[]
-    │       ├── skills.ts           # SkillGroup[]
-    │       ├── side-hustles.ts     # SideHustle[]
-    │       ├── blog.ts             # BlogConfig
-    │       └── timeline.ts         # TimelineEntry[]
-    ├── hooks/
-    │   └── useActiveSection.ts     # scroll-spy state machine
-    └── styles/
-        ├── background-layer.css            # BackgroundLayer + aurora
-        ├── side-nav.css                    # SideNav
-        ├── mobile-menu.css                 # MobileMenu
-        ├── section-shell.css               # SectionShell
-        ├── about-section.css               # AboutSection
-        ├── hero-section.css                # HeroSection
-        ├── projects-section.css            # ProjectsSection
-        ├── skills-section.css              # SkillsSection
-        ├── blog-section.css                # BlogSection
-        ├── timeline-section.css            # TimelineSection
-        ├── side-hustle-section.css         # SideHustleSection
-        ├── contact-section.css             # ContactSection
-        ├── theme-toggle.css                # ThemeToggle
-        └── utilities.css                   # Page wrapper
+│   └── verify-*.mjs           # sidenav + computed-style verification
+├── src/
+│   ├── app/
+│   │   ├── layout.tsx         # metadata + JSON-LD
+│   │   ├── page.tsx           # composes all sections
+│   │   └── globals.css        # CSS vars + reset (incl. --scroll-pill-gap, --scroll-pill-height, --scroll-fade-threshold)
+│   ├── components/
+│   │   ├── NavController.tsx          # client — scroll-spy hub
+│   │   ├── SideNav.tsx                # server — presentational
+│   │   ├── MobileMenu.tsx             # client — drawer + body scroll lock
+│   │   ├── SectionShell.tsx           # client — IntersectionObserver fade-in
+│   │   ├── BackgroundLayer.tsx        # server — pure CSS animation
+│   │   ├── HeroSection.tsx            # client — typewriter + scroll pill (consumes `scrollFaded` prop)
+│   │   ├── PageContent.tsx            # client — owns single scroll listener; computes `scrollFaded` + `.is-lifted`
+│   │   ├── AboutSection.tsx           # server — presentational
+│   │   ├── ProjectsSection.tsx        # client — onError handler
+│   │   ├── SkillsSection.tsx          # server — presentational
+│   │   ├── BlogSection.tsx            # client — fetch on mount
+│   │   ├── TimelineSection.tsx        # server — presentational
+│   │   ├── SideHustleSection.tsx      # server — presentational
+│   │   ├── ContactSection.tsx         # server — presentational
+│   │   ├── ThemeToggle.tsx            # client — data-theme + localStorage
+│   │   └── socialIcons.ts             # shared SVG paths
+│   ├── data/
+│   │   └── profile/                   # all content, split into per-section files
+│   │       ├── index.ts               # Profile interface + top-level fields + socials + navSections + aggregator
+│   │       ├── about.ts
+│   │       ├── projects.ts
+│   │       ├── skills.ts
+│   │       ├── side-hustles.ts
+│   │       ├── blog.ts
+│   │       └── timeline.ts
+│   ├── hooks/
+│   │   └── useActiveSection.ts        # scroll-spy state machine
+│   └── styles/
+│       ├── background-layer.css            # BackgroundLayer + aurora
+│       ├── side-nav.css                    # SideNav
+│       ├── mobile-menu.css                 # MobileMenu
+│       ├── section-shell.css               # SectionShell
+│       ├── about-section.css               # AboutSection
+│       ├── hero-section.css                # HeroSection + scroll-fade + reduced-motion
+│       ├── page-layout.css                 # below-hero lift + reduced-motion
+│       ├── projects-section.css            # ProjectsSection
+│       ├── skills-section.css              # SkillsSection
+│       ├── blog-section.css                # BlogSection
+│       ├── timeline-section.css            # TimelineSection
+│       ├── side-hustle-section.css         # SideHustleSection
+│       ├── contact-section.css             # ContactSection
+│       ├── theme-toggle.css                # ThemeToggle
+│       └── utilities.css                   # Page wrapper
                                           # Imported individually in layout.tsx
                                           # (Turbopack doesn't resolve CSS @import)
+└── tests/
+    ├── setup.ts                     # @testing-library/jest-dom + IntersectionObserver mock + cleanup
+    ├── components/
+    │   ├── BlogSection.test.tsx
+    │   ├── ContactSection.test.tsx
+    │   ├── HeroSection.test.tsx
+    │   ├── PageContent.test.tsx     # 14 cases: threshold parsing, initial state, rAF coalescing, cleanup
+    │   └── SectionShell.test.tsx
+    └── lib/
+        └── hue.test.ts
 ```
 
 ## Architecture
@@ -145,6 +162,7 @@ App Router uses React Server Components by default. The site is interactive only
 | `TimelineSection` | Server | Pure presentational |
 | `SideHustleSection` | Server | Pure presentational |
 | `ContactSection` | Server | Pure presentational |
+| `PageContent` | Client | Single scroll listener → drives `.is-faded` (hero pill) + `.is-lifted` (below-hero); reads `--scroll-fade-threshold` CSS var |
 | `HeroSection` | Client | Typewriter state machine |
 | `SectionShell` | Client | IntersectionObserver fade-in |
 | `SideNav` | Server | Presentational, receives props |

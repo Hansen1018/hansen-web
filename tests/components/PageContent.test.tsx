@@ -39,7 +39,7 @@ import PageContent from '@/components/PageContent'
 
 // ——— Harness ————————————————————————————————————————————————————————
 
-let scrollHandler: (() => void) | null = null
+let scrollHandler: EventListener | null = null
 let rafCallbacks: FrameRequestCallback[] = []
 let nextRafId = 1
 
@@ -100,7 +100,7 @@ function setScrollY(value: number) {
 
 function fireScroll(times = 1) {
   act(() => {
-    for (let i = 0; i < times; i++) scrollHandler?.()
+    for (let i = 0; i < times; i++) scrollHandler?.(new Event('scroll'))
   })
 }
 
@@ -231,7 +231,7 @@ describe('PageContent — rAF-coalesced scroll handler', () => {
     // Event 1 fires while scrollY is still below threshold; between event and
     // rAF, scrollY climbs past the threshold. The rAF must observe the newer
     // value (this is the whole point of coalescing — single read per frame).
-    scrollHandler?.()
+    scrollHandler?.(new Event('scroll'))
     expect(rafCallbacks.length).toBe(1)
 
     setScrollY(100)

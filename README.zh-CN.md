@@ -27,11 +27,12 @@
 ## 功能特性
 
 - **Next.js App Router** + `output: 'export'` —— 纯静态站点，零运行时成本
-- **React** 默认走服务端组件；14 个组件里只有 7 个需要打包客户端 JS
+- **React** 默认走服务端组件；15 个组件里只有 8 个需要打包客户端 JS
 - **TypeScript strict** —— 数据、Hook、组件全程类型安全
 - **玻璃拟态 + 极光背景** —— 三团漂浮的径向光晕 + 颗粒噪点叠加 + `backdrop-filter` 玻璃卡片
 - **滚动监听** —— 单一 `IntersectionObserver` 同时驱动桌面 `SideNav` 和移动端 `MobileMenu`（`NavController` 封装）
 - **Hero 打字机** —— `type → pause → delete` 状态机，带 `prefers-reduced-motion` 守卫
+- **Scroll-driven 滚动联动效果** —— `PageContent` 持有唯一的 `useLayoutEffect` 滚动监听；读取 `--scroll-fade-threshold`（定义在 `globals.css :root` 的 CSS 变量），切换 `.hero__scroll` 的 `.is-faded`（opacity 0 + `pointer-events: none` + `tabIndex={-1}`）以及 `.below-hero` 的 `.is-lifted`（`translateY(-70px)` + 匹配的 `margin-bottom` 抵消布局位移）。rAF 合并（每帧最多 1 次 `setState`）。`prefers-reduced-motion` 分文件处理：pill 透明度瞬切、停掉 pill 内部 bounce、还原 transform + margin-bottom。
 - **博客 Feed 实时拉取** —— 客户端 `fetch()` `https://blog.hansendong.top/index.json`，`cache: "no-store"`；5 分钟轮询 + `visibilitychange` 触发刷新，不需要构建期同步
 - **Open Graph + JSON-LD** —— 完整的元数据 API：`Person` + `WebSite` + `WebPage` 结构化数据
 - **移动优先响应式** —— 断点 640 / 720 / 900 / 1180 px
@@ -47,13 +48,16 @@
 | 图片生成 | sharp（SVG → PNG for `og.png`） | — |
 | 博客 feed | Hugo `index.json`（实时拉取，CORS 开启） | — |
 | 部署 | `rsync` over SSH → `/var/www/hansen-web/` | — |
+| 测试 | vitest + @testing-library/react + jsdom | 5.0 / 16 |
 
 ## 快速开始
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173
-npm run build      # 输出到 out/
+npm run dev          # http://localhost:5173
+npm run build        # 输出到 out/
+npm test             # vitest run（组件测试在 tests/components/）
+npm run type-check   # tsc --noEmit
 ```
 
 `npm run build` 会先跑一个 prebuild 步骤：
@@ -66,67 +70,80 @@ prebuild
 ## 项目结构
 
 ```
-hansen-web-next/
+hansen-web/
 ├── package.json
-├── next.config.mjs        # output: 'export' + images.unoptimized + CSP/XFO headers
-├── tsconfig.json          # strict 模式，@/* 路径别名
-├── deploy.sh              # 原子替换 + rsync + post-deploy 健康检查
-├── public/                # favicon、og.svg（构建后产物）
-├── screenshots/           # README 预览图（桌面 / 移动）
+├── next.config.mjs            # output: 'export' + images.unoptimized
+├── tsconfig.json              # strict 模式，@/* 路径别名
+├── vitest.config.ts           # jsdom 环境，@ 别名指向 ./src，setup 文件
+├── deploy.sh                  # 原子替换 + rsync + post-deploy 健康检查
+├── public/                    # favicon、og.svg（构建后产物）
+├── screenshots/               # README 预览图（桌面 / 移动）
 ├── scripts/
-│   ├── gen-og.mjs         # SVG → PNG
+│   ├── gen-og.mjs             # SVG → PNG（prebuild 钩子）
 │   ├── capture-previews.mjs
 │   ├── audit-cyan-light.mjs   # WCAG 青色对比度审计
-│   └── verify-*.mjs       # 侧导航 + computed style 校验
-└── src/
-    ├── app/
-    │   ├── layout.tsx     # metadata + JSON-LD
-    │   ├── page.tsx       # 组合所有 section
-    │   └── globals.css    # CSS 变量 + reset
-    ├── components/
-    │   ├── NavController.tsx       # client —— scroll-spy 调度
-    │   ├── SideNav.tsx             # server —— 纯展示
-    │   ├── MobileMenu.tsx          # client —— 抽屉 + body 滚动锁
-    │   ├── SectionShell.tsx        # client —— IntersectionObserver 渐入
-    │   ├── BackgroundLayer.tsx     # server —— 纯 CSS 动画
-    │   ├── HeroSection.tsx         # client —— 打字机
-    │   ├── AboutSection.tsx        # server —— 纯展示
-    │   ├── ProjectsSection.tsx     # client —— onError 处理器
-    │   ├── SkillsSection.tsx       # server —— 纯展示
-    │   ├── BlogSection.tsx         # client —— 挂载时 fetch
-    │   ├── TimelineSection.tsx     # server —— 纯展示
-    │   ├── SideHustleSection.tsx   # server —— 纯展示
-    │   ├── ContactSection.tsx      # server —— 纯展示
-    │   ├── ThemeToggle.tsx         # client —— data-theme + localStorage 同步
-    │   └── socialIcons.ts          # 共享 SVG path
-    ├── data/
-    │   └── profile/                # 全部内容，按 section 拆分的文件
-    │       ├── index.ts            # Profile interface + 顶部字段 + socials + navSections + aggregator
-    │       ├── about.ts            # {intro, paragraphs, highlights}
-    │       ├── projects.ts         # Project[]
-    │       ├── skills.ts           # SkillGroup[]
-    │       ├── side-hustles.ts     # SideHustle[]
-    │       ├── blog.ts             # BlogConfig
-    │       └── timeline.ts         # TimelineEntry[]
-    ├── hooks/
-    │   └── useActiveSection.ts     # scroll-spy 状态机
-    └── styles/
-        ├── background-layer.css            # BackgroundLayer + aurora
-        ├── side-nav.css                    # SideNav
-        ├── mobile-menu.css                 # MobileMenu
-        ├── section-shell.css               # SectionShell
-        ├── about-section.css               # AboutSection
-        ├── hero-section.css                # HeroSection
-        ├── projects-section.css            # ProjectsSection
-        ├── skills-section.css              # SkillsSection
-        ├── blog-section.css                # BlogSection
-        ├── timeline-section.css            # TimelineSection
-        ├── side-hustle-section.css         # SideHustleSection
-        ├── contact-section.css             # ContactSection
-        ├── theme-toggle.css                # ThemeToggle
-        └── utilities.css                   # Page wrapper
+│   └── verify-*.mjs           # 侧导航 + computed style 校验
+├── src/
+│   ├── app/
+│   │   ├── layout.tsx         # metadata + JSON-LD
+│   │   ├── page.tsx           # 组合所有 section
+│   │   └── globals.css        # CSS 变量（含 --scroll-pill-gap、--scroll-pill-height、--scroll-fade-threshold）+ reset
+│   ├── components/
+│   │   ├── NavController.tsx          # client —— scroll-spy 调度
+│   │   ├── SideNav.tsx                # server —— 纯展示
+│   │   ├── MobileMenu.tsx             # client —— 抽屉 + body 滚动锁
+│   │   ├── SectionShell.tsx           # client —— IntersectionObserver 渐入
+│   │   ├── BackgroundLayer.tsx        # server —— 纯 CSS 动画
+│   │   ├── HeroSection.tsx            # client —— 打字机 + 滚动 pill（消费 `scrollFaded` prop）
+│   │   ├── PageContent.tsx            # client —— 持有唯一滚动监听；计算 `scrollFaded` + 应用 `.is-lifted`
+│   │   ├── AboutSection.tsx           # server —— 纯展示
+│   │   ├── ProjectsSection.tsx        # client —— onError 处理器
+│   │   ├── SkillsSection.tsx          # server —— 纯展示
+│   │   ├── BlogSection.tsx            # client —— 挂载时 fetch
+│   │   ├── TimelineSection.tsx        # server —— 纯展示
+│   │   ├── SideHustleSection.tsx      # server —— 纯展示
+│   │   ├── ContactSection.tsx         # server —— 纯展示
+│   │   ├── ThemeToggle.tsx            # client —— data-theme + localStorage 同步
+│   │   └── socialIcons.ts             # 共享 SVG path
+│   ├── data/
+│   │   └── profile/                   # 全部内容，按 section 拆分的文件
+│   │       ├── index.ts               # Profile interface + 顶部字段 + socials + navSections + aggregator
+│   │       ├── about.ts
+│   │       ├── projects.ts
+│   │       ├── skills.ts
+│   │       ├── side-hustles.ts
+│   │       ├── blog.ts
+│   │       └── timeline.ts
+│   ├── hooks/
+│   │   └── useActiveSection.ts        # scroll-spy 状态机
+│   └── styles/
+│       ├── background-layer.css            # BackgroundLayer + aurora
+│       ├── side-nav.css                    # SideNav
+│       ├── mobile-menu.css                 # MobileMenu
+│       ├── section-shell.css               # SectionShell
+│       ├── about-section.css               # AboutSection
+│       ├── hero-section.css                # HeroSection + scroll-fade + reduced-motion
+│       ├── page-layout.css                 # below-hero lift + reduced-motion
+│       ├── projects-section.css            # ProjectsSection
+│       ├── skills-section.css              # SkillsSection
+│       ├── blog-section.css                # BlogSection
+│       ├── timeline-section.css            # TimelineSection
+│       ├── side-hustle-section.css         # SideHustleSection
+│       ├── contact-section.css             # ContactSection
+│       ├── theme-toggle.css                # ThemeToggle
+│       └── utilities.css                   # Page wrapper
                                           # 在 layout.tsx 中分别导入
                                           # （Turbopack 不解析 CSS @import）
+└── tests/
+    ├── setup.ts                     # @testing-library/jest-dom + IntersectionObserver mock + cleanup
+    ├── components/
+    │   ├── BlogSection.test.tsx
+    │   ├── ContactSection.test.tsx
+    │   ├── HeroSection.test.tsx
+    │   ├── PageContent.test.tsx     # 14 个 case：阈值解析、初始 state、rAF 合并、卸载清理
+    │   └── SectionShell.test.tsx
+    └── lib/
+        └── hue.test.ts
 ```
 
 ## 架构
@@ -145,6 +162,7 @@ App Router 默认使用 React Server Components。这个站点只在真正需要
 | `TimelineSection` | Server | 纯展示 |
 | `SideHustleSection` | Server | 纯展示 |
 | `ContactSection` | Server | 纯展示 |
+| `PageContent` | Client | 单一滚动监听 → 驱动 `.is-faded`（hero pill）+ `.is-lifted`（below-hero）；读取 `--scroll-fade-threshold` CSS 变量 |
 | `HeroSection` | Client | 打字机状态机 |
 | `SectionShell` | Client | IntersectionObserver 渐入 |
 | `SideNav` | Server | 纯展示，接收 props |
