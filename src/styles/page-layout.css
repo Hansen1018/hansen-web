@@ -12,7 +12,11 @@
    Keeping it always-on would pin a layer for the entire AboutSection+
    subtree (7 sections) for no reason during the page's idle state. */
 .below-hero.is-lifted {
-  transform: translateY(-70px);
+  /* Same source of truth as .hero__scroll (hero-section.css) and
+     SCROLL_FADE_THRESHOLD (PageContent.tsx) — the 70px here is
+     --scroll-pill-gap (32px) + --scroll-pill-height (38px). Edit the
+     vars in globals.css :root and this follows. */
+  transform: translateY(calc(-1 * (var(--scroll-pill-gap, 32px) + var(--scroll-pill-height, 38px))));
   will-change: transform;
 }
 

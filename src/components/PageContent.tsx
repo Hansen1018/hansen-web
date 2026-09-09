@@ -19,10 +19,13 @@ import ContactSection from './ContactSection'
  * IntersectionObserver fade-in for every section below the hero — this
  * wrapper only repositions them, never hides them.
  *
- * Cross-file geometry contract — keep in sync:
- *   - SCROLL_FADE_THRESHOLD (this file) — runtime pixel value the scroll
- *     listener compares against window.scrollY.
- *   - pill height 38px + bottom gap 32px = 70px lift in `page-layout.css`.
+ * Cross-file geometry contract — single source of truth lives in
+ * `src/app/globals.css :root`:
+ *   - --scroll-pill-gap (32px) + --scroll-pill-height (38px) consumed by
+ *     .hero__scroll (hero-section.css) and .below-hero.is-lifted
+ *     (page-layout.css) via var().
+ *   - SCROLL_FADE_THRESHOLD (this file) is a JS constant — it has to be,
+ *     since it's compared against window.scrollY at runtime.
  *   - .hero__scroll opacity .7s cubic-bezier(.22,1,.36,1) in
  *     `hero-section.css` (same curve as the transform).
  */

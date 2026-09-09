@@ -236,14 +236,6 @@
 
 @keyframes caret-blink { 50% { opacity: 0; } }
 
-@media (prefers-reduced-motion: reduce) {
-  .hero__name-caret { animation: none; }
-  /* Skip the pill's 0.7s opacity transition — the fade itself is short
-     and subtle, but a 700ms cross-fade can still feel like motion for
-     reduced-motion users. Snapping to opacity:0 is closer to "no
-     animation" than a slow fade. */
-  .hero__scroll { transition: none; }
-}
 
 .hero__hi {
   font-size: clamp(14px, 1.6vw, 16px);
@@ -331,11 +323,11 @@
 
 .hero__scroll {
   position: absolute;
-  bottom: 32px;
+  bottom: var(--scroll-pill-gap, 32px);
   left: 50%;
   transform: translateX(-50%);
   width: 22px;
-  height: 38px;
+  height: var(--scroll-pill-height, 38px);
   border: 1.5px solid var(--line-strong);
   border-radius: 999px;
   display: grid;
@@ -351,6 +343,14 @@
 .hero__scroll.is-faded {
   opacity: 0;
   pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero__name-caret { animation: none; }
+  /* Skip the pill's 0.7s opacity transition — the fade itself is short
+     and subtle, but a 700ms cross-fade can still feel like motion for
+     reduced-motion users. Snapping to opacity:0 is closer to "no
+     animation" than a slow fade. */
+  .hero__scroll { transition: none; }
 }
 .hero__scroll-line {
   width: 1.5px;
