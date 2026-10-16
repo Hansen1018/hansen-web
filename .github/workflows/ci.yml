@@ -30,11 +30,17 @@ jobs:
     timeout-minutes: 15
 
     steps:
+      # Actions are pinned to full commit SHAs, with the release tag kept in a
+      # trailing comment. A tag can be moved by the upstream maintainer or by
+      # anyone who compromises that repository; a SHA cannot. The dependabot
+      # github-actions entry added in this same PR understands this format and
+      # will move the SHA and the comment together, so the pinning costs no
+      # manual upkeep.
       - name: Checkout
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Node
-        uses: actions/setup-node@v7.1.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           # Satisfies package.json engines: "^22.12.0 || ^24.0.0 || >=26.0.0".
           # Pinned to a major so a new LTS lands as a visible diff in this file
