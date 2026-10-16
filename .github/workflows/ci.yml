@@ -1,0 +1,61 @@
+name: CI
+
+# The repo already declares three gates in package.json (type-check, test,
+# build) and had 24 passing tests, but nothing ran them. Nothing ran them on
+# any branch, so a broken build or a breaking dependency bump could only be
+# discovered by deploying. This workflow closes that gap.
+#
+# Deliberately scoped to what the repo can prove: it runs the scripts it
+# already has and installs with `npm ci` so the tested tree is exactly the
+# committed lockfile, never a drifted resolution.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Read-only by default. This workflow needs no write access.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: type-check, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@v7.1.0
+        with:
+          # Satisfies package.json engines: "^22.12.0 || ^24.0.0 || >=26.0.0".
+          # Pinned to a major so a new LTS lands as a visible diff in this file
+          # rather than silently changing what CI exercises.
+          node-version: "24"
+          cache: npm
+
+      - name: Install
+        run: npm ci
+        env:
+          # The playwright package's postinstall pulls roughly 500MB of browser
+          # binaries. No test uses a real browser (they run under jsdom), so
+          # that download is pure CI time cost. Revisit if a Playwright test is
+          # ever added, and then drop this line rather than leaving it stale.
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+
+      - name: Type-check
+        run: npm run type-check
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build

@@ -1,0 +1,40 @@
+version: 2
+updates:
+  # Runtime dependencies. Keeping production updates in their own group stops a
+  # weekly patch PR from also dragging in dev-tool churn, which is the main
+  # reason people end up ignoring dependabot and doing upgrades by hand.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      runtime-minor-patch:
+        dependency-type: "production"
+        update-types: ["minor", "patch"]
+      dev-minor-patch:
+        dependency-type: "development"
+        update-types: ["minor", "patch"]
+
+  # The workflows themselves. actions/checkout and actions/setup-node are the
+  # highest-value things to keep current here — they are the two actions every
+  # other workflow depends on, and they are the usual entry point for a CI
+  # supply-chain compromise.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      actions:
+        patterns: ["*"]
