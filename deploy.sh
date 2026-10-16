@@ -161,39 +161,35 @@ else
         missing_directives+=("default-src 'self'")
       fi
 
-      # Verifier (PR #6 CodeRabbit review): connect-src must whitelist both CDN
-      # origins. These are required by Artalk emoji plugin (jsdelivr) and theme
-      # chroma highlight / PhotoSwipe (cdnjs). Without these, the verifier
-      # reports CSP success but emoji/plugin fetches silently fail with
-      # `TypeError: Failed to fetch` in atk-error-layer.
+      # No per-origin connect-src assertions here, and that is deliberate.
       #
-      # Token-boundary hardening (PR #6 follow-up review): the regex anchors
-      # BOTH ends to reject false positives in the unsafe direction AND to
-      # accept all valid CSP source expression forms:
-      #   - Leading `connect-src[[:space:]]+` rejects prefix-junk directives
-      #     like `connect-src-extra https://cdn.jsdelivr.net;` (unknown to
-      #     browsers but the previous unanchored match accepted as success).
-      #   - Trailing `([[:space:];/]|$)` rejects lookalike hosts
-      #     (`https://cdn.jsdelivr.net.evil.example`) and prefix-junk
-      #     directives — in both cases the char right after the literal CDN
-      #     hostname is not a valid CSP token boundary. Accepts all three
-      #     valid CSP source forms:
-      #       - origin:        `https://cdn.jsdelivr.net;`          (followed by ;)
-      #       - path-prefix:   `https://cdn.jsdelivr.net/;`         (followed by /)
-      #       - specific file: `https://cdn.jsdelivr.net/foo.js;`   (followed by /)
-      #     and space-separator multi-source directives like
-      #       `connect-src https://cdn.jsdelivr.net https://cdnjs.cloudflare.com;`
-      #     (followed by space).
-      if ! printf '%s' "$actual_value" \
-            | grep -qiE "(^|[[:space:];])connect-src[[:space:]]+[^;]*https://cdn\.jsdelivr\.net([[:space:];/]|$)"; then
-        weak=1
-        missing_directives+=("connect-src with https://cdn.jsdelivr.net")
-      fi
-      if ! printf '%s' "$actual_value" \
-            | grep -qiE "(^|[[:space:];])connect-src[[:space:]]+[^;]*https://cdnjs\.cloudflare\.com([[:space:];/]|$)"; then
-        weak=1
-        missing_directives+=("connect-src with https://cdnjs.cloudflare.com")
-      fi
+      # Commit 93e119d added two: connect-src must whitelist
+      # https://cdn.jsdelivr.net and https://cdnjs.cloudflare.com, described
+      # there as required by the Artalk emoji plugin, theme chroma highlight
+      # and PhotoSwipe. Artalk never shipped in this project. Measured against
+      # the deployed tree (35 files) and against src/, scripts/ and public/:
+      #
+      #   cdn.jsdelivr.net      deployed 0   source 0
+      #   cdnjs.cloudflare.com  deployed 0   source 0
+      #   artalk                deployed 0   source 0
+      #   busuanzi              deployed 0   source 0
+      #   ko-fi                 deployed 0   source 0
+      #   player.bilibili.com   deployed 0   source 0
+      #   third-party fetch / XMLHttpRequest / WebSocket / EventSource in
+      #   _next/static/chunks/*.js: 0
+      #
+      # The assertion could never be satisfied by this site, so it warned on
+      # every deploy and pointed at a policy that was not broken. It also
+      # misdescribed the risk: an origin under script-src does not authorise a
+      # fetch, and this site issues no third-party fetch at all.
+      #
+      # The two checks that remain, frame-ancestors 'none' and default-src
+      # 'self', are the ones that defend this deployment and both still hold
+      # against the live response.
+      #
+      # If a third-party integration is ever added, add a single assertion for
+      # it here, based on a real request in the built output rather than on a
+      # plan.
 
       if [[ $weak -eq 1 ]]; then
         mismatched_headers+=("$header (missing critical directive: ${missing_directives[*]})")
