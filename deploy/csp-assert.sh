@@ -167,53 +167,91 @@ origin|style-src|https://cdn.jsdelivr.net
 RULES
 }
 
-# csp_missing_directives <policy>
+# csp_rule_list
 #
-# Prints one label per critical directive the policy is missing, one per
-# line, and returns 1 when any is missing. Returns 0 and prints nothing
-# when the policy satisfies every rule.
+# Print the rules that run, one per line, as "<kind>|<directive>|<value>".
+#
+# This is the ONE place the rule list is parsed. Both the enforcement below
+# and csp_rule_count read this output, so the number the operator reads and
+# the rules that actually run cannot drift apart.
+#
+# A rule that cannot run is printed as "!!<reason>", so the caller sees it on
+# stdout instead of silently checking fewer rules than it says.
+csp_rule_list() {
+  local line kind rest directive value
+  while IFS= read -r line; do
+    case "$line" in
+      ''|'#'*)
+        # A blank line and a comment are not rules.
+        continue
+        ;;
+    esac
+    kind="${line%%|*}"
+    rest="${line#*|}"
+    directive="${rest%%|*}"
+    value="${rest#*|}"
+    case "$rest" in
+      *'|'*) : ;;
+      *)
+        # A rule needs three fields: kind, directive and value.
+        printf '!!malformed rule: %s\n' "$line"
+        continue
+        ;;
+    esac
+    case "$value" in
+      *'|'*)
+        # The fields are split on "|", so a value may not contain one.
+        printf '!!malformed rule: %s\n' "$line"
+        continue
+        ;;
+    esac
+    case "$kind" in
+      canonical|origin) ;;
+      *)
+        # An unknown kind is a typo, and a typo must not turn into a rule
+        # that is silently never enforced.
+        printf '!!unknown rule kind: %s\n' "$kind"
+        continue
+        ;;
+    esac
+    if [ -z "$directive" ] || [ -z "$value" ]; then
+      # A rule with a missing field enforces nothing, so it is not a rule.
+      printf '!!malformed rule: %s\n' "$line"
+      continue
+    fi
+    printf '%s|%s|%s\n' "$kind" "$directive" "$value"
+  done < <(csp_rules)
+}
+
 csp_missing_directives() {
   local policy="${1-}"
   local status=0
+  local rule_count=0
   local kind directive value
+  local canonical_directive canonical_value
+  local line rest
 
   policy="$(csp_fold_policy "$policy")"
 
-  local rule_count=0
-  local canonical_directive canonical_value
-
-  while IFS='|' read -r kind directive value; do
-    # A blank line is not a rule, so it is skipped here and in
-    # csp_rule_count: the number the operator reads and the rules that run
-    # are the same set.
-    case "$kind" in
-      '')
-        # A blank line is not a rule, and csp_rule_count does not count it
-        # either.
-        continue
-        ;;
-      '#'*)
-        # A comment in the rule list is not a rule either.
-        continue
-        ;;
-      canonical|origin)
-        # A rule with a missing field is not a rule: it would be counted
-        # here and enforce nothing.
-        if [ -z "$directive" ] || [ -z "$value" ]; then
-          echo "malformed rule: $kind|$directive|$value" >&2
-          status=1
-          continue
-        fi
-        rule_count=$((rule_count + 1))
-        ;;
-      *)
-        # An unknown kind is a typo. Silently skipping it would leave a rule
-        # that does not run counting as a rule that was checked.
-        echo "unknown rule kind: $kind" >&2
+  # The rules come from csp_rule_list, the same list csp_rule_count counts,
+  # so the number the operator reads and the rules that run are the same
+  # set, field for field.
+  while IFS= read -r line; do
+    # A problem with the rule list is reported as a LABEL on stdout: the
+    # caller reads stdout to decide what to report, so a rule that cannot
+    # run must not be invisible there.
+    case "$line" in
+      '!!'*)
+        printf '%s\n' "${line#!!}"
         status=1
         continue
         ;;
     esac
+    kind="${line%%|*}"
+    rest="${line#*|}"
+    directive="${rest%%|*}"
+    value="${rest#*|}"
+    rule_count=$((rule_count + 1))
     case "$kind" in
       canonical)
         # The directive and the value are escaped like the origin below, so
@@ -233,7 +271,7 @@ csp_missing_directives() {
         fi
         ;;
     esac
-  done < <(csp_rules)
+  done < <(csp_rule_list)
 
   # An empty rule list would report every policy as verified while no rule
   # ran at all, so it fails instead. The label goes to stdout as well,
@@ -257,5 +295,9 @@ csp_rule_count() {
   # the enforcement loop skips. "grep -c" exits 1 when it counts nothing,
   # so the exit status is ignored: the number is a display, and an empty
   # rule list is caught where it matters, in csp_missing_directives.
-  csp_rules | grep -c -E '^(canonical|origin)[|][^|]+[|][^|]+$' || true
+  # The number of rules that RUN: the same list the enforcement
+  # consumes, parsed by the same function, so the two cannot drift
+  # apart. A "!!" line is a problem with the rule list, not a rule,
+  # so it is not counted.
+  csp_rule_list | grep -c -E '^(canonical|origin)[|]' || true
 }

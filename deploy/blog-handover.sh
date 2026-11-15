@@ -375,7 +375,10 @@ stage_blog_into_staging() {
   }
   bh_special="$(printf '%s
 ' "$bh_special_all" | sed -n '1p')"
-  if [ -n "$bh_special" ]; then
+  # The detection uses the whole list, so a filename that contains a
+  # newline cannot hide the entry that has to be reported. The message
+  # below names the first line of it.
+  if [ -n "$bh_special_all" ]; then
     echo "error: $bh_special is not a regular file, directory or symlink; the hand-over copies only those" >&2
     return 1
   fi

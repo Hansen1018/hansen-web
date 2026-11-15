@@ -111,11 +111,15 @@ fi
 # entirely, and ".." would be resolved against that host's tree. A local
 # deploy never leaves this host, so "./site", "out/../site" and "site/"
 # all keep working.
-REMOTE_DIR="$(bh_trim_path "$REMOTE_DIR")"
+if [[ "$DEPLOY_MODE" == "remote" ]]; then
+  # The ".." check runs on the value AS IT WAS GIVEN: folding it away
+  # first would hide the very component the check is about.
+  require_no_parent_refs "$REMOTE_DIR" 'REMOTE_DIR' || exit 1
+fi
+REMOTE_DIR="$(bh_folded_path "$REMOTE_DIR")"
 validate_remote_dir "$REMOTE_DIR" || exit 1
 if [[ "$DEPLOY_MODE" == "remote" ]]; then
   require_absolute_path "$REMOTE_DIR" 'REMOTE_DIR' || exit 1
-  require_no_parent_refs "$REMOTE_DIR" 'REMOTE_DIR' || exit 1
 fi
 
 # 1. Local build
@@ -158,10 +162,12 @@ if [[ "$DEPLOY_MODE" == "remote" ]]; then
   # written there. The remote's diagnostics go to stderr, which reaches
   # this terminal directly, so a refusal is shown to the operator as it
   # happens instead of being swallowed into a variable.
-  handover_out="$(printf '%s\n' "$handover_script" | ssh "$HOST" "sh -s -- ${REMOTE_DIR_Q} ${REMOTE_DIR_TMP_Q}")" || {
-    echo "✗ the blog hand-over failed on $HOST" >&2
-    exit 1
-  }
+  # The exit status is captured, not acted on: the confirmation below is
+  # what decides. A pipeline can be non-zero because the local writer
+  # got SIGPIPE while the remote had already succeeded, and that must
+  # not abort a hand-over that worked.
+  handover_status=0
+  handover_out="$(printf '%s\n' "$handover_script" | ssh "$HOST" "sh -s -- ${REMOTE_DIR_Q} ${REMOTE_DIR_TMP_Q}")" || handover_status=$?
   # The expected confirmations come from the module's own functions, so the
   # wording lives in one place and the comparison is EXACT. A prefix match
   # would accept a stdout that merely starts with the marker.
@@ -174,7 +180,7 @@ if [[ "$DEPLOY_MODE" == "remote" ]]; then
       echo "  ⚠ the live web root has no blog/ to carry over" >&2
       ;;
     *)
-      echo "✗ the blog hand-over did not report success on $HOST; refusing to swap" >&2
+      echo "✗ the blog hand-over did not report success on $HOST (ssh exit $handover_status); refusing to swap" >&2
       exit 1
       ;;
   esac

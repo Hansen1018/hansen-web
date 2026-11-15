@@ -352,12 +352,28 @@ describe('the rule list fails closed when it is wrong', () => {
     return { stdout: out.stdout ?? '', stderr: out.stderr ?? '' }
   }
 
+  it('counts only the rules that run', () => {
+    // The number the operator reads and the rules that run come from one
+    // parse, so a rule list with a typo cannot claim coverage it does
+    // not have.
+    const file = moduleWithRules('origins|connect-src|https://cdn.jsdelivr.net\n')
+    const count = Number(
+      execFileSync('bash', ['-c', 'source "$1"; csp_rule_count', 'count-test', file], {
+        encoding: 'utf8',
+      }).trim(),
+    )
+    expect(count).toBe(0)
+  })
+
   it('fails when a rule kind is misspelled', () => {
     // A typo in the kind would leave a rule that does not run counting as
     // a rule that was checked.
     const file = moduleWithRules('origins|connect-src|https://cdn.jsdelivr.net\n')
     const res = cspRun(COMPLETE, file)
-    expect(res.stderr).toContain('unknown rule kind')
+    // The diagnostic is on stdout, because that is what deploy.sh reads:
+    // a rule list it cannot parse must be visible to the operator, not
+    // swallowed while the check reports success.
+    expect(res.stdout).toContain('unknown rule kind')
   })
 
   it('fails when the rule list is empty', () => {
