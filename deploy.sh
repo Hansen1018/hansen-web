@@ -51,65 +51,16 @@ remote_quote() {
   printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
 }
 
-# normalize_remote_dir PATH
-#
-# Print PATH with its trailing slashes trimmed, refusing the shapes that
-# would make the swap delete something other than the web root:
-#   - an empty path,
-#   - the root directory, in every spelling (/, //, /., /./),
-#   - a "." or ".." component, which means the path names somewhere else
-#     than it says.
-#
-# The path is the argument of the swap's "rm -rf", so it is checked rather
-# than trusted: REMOTE_DIR is overridable through the environment, and
-# "REMOTE_DIR=/" reaches "rm -rf /" unless something refuses it.
-#
-# The trailing slash matters too: without trimming it, "/var/www/site/"
-# derives the staging directory "/var/www/site/.tmp" instead of
-# "/var/www/site.tmp" -- a different directory, and one inside the web root.
+# The path rules live in deploy/blog-handover.sh, which deploy.sh sources
+# above, so there is ONE implementation of what a safe path is: the module
+# checks the two roots it is given, and deploy.sh checks REMOTE_DIR with the
+# same functions. Two validators that disagree about what is safe are worse
+# than one.
 #
 # --- remote path validation (begin) ---
-normalize_remote_dir() {
-  local path="$1"
-
-  while [ "${path%/}" != "$path" ] && [ "$path" != "/" ]; do
-    path="${path%/}"
-  done
-
-  case "$path" in
-    "")
-      echo "✗ REMOTE_DIR must not be empty" >&2
-      return 1
-      ;;
-  esac
-
-  case "$path" in
-    /|//|/.|/./)
-      echo "✗ REMOTE_DIR must not be the root directory (got: $1)" >&2
-      return 1
-      ;;
-  esac
-
-  case "/$path/" in
-    */../*)
-      echo "✗ REMOTE_DIR must not contain a '..' component (got: $1)" >&2
-      return 1
-      ;;
-    */./*)
-      echo "✗ REMOTE_DIR must not contain a '.' component (got: $1)" >&2
-      return 1
-      ;;
-  esac
-
-  printf '%s\n' "$path"
+validate_remote_dir() {
+  bh_path_is_safe "$1" 'REMOTE_DIR'
 }
-
-# require_absolute_path PATH
-#
-# The remote branch hands the path to another host: it goes into the ssh
-# command strings and into rsync's own remote command line, where a
-# relative path would name something else entirely. The local branch keeps
-# its paths local, so a relative REMOTE_DIR stays allowed there.
 require_absolute_path() {
   case "$1" in
     /*) return 0 ;;
@@ -120,8 +71,6 @@ require_absolute_path() {
   esac
 }
 # --- remote path validation (end) ---
-
-
 
 # Deploy mode selection
 if [[ -n "${1:-}" ]]; then
@@ -135,13 +84,21 @@ fi
 # Checked before the build, so a bad path fails in a second rather than
 # after a full build, and long before anything is deleted. The trimmed path
 # is used from here on, so the staging directory is derived from the same
-# string the swap deletes.
-REMOTE_DIR="$(normalize_remote_dir "$REMOTE_DIR")" || exit 1
+# string the swap deletes: "/var/www/site/" would otherwise derive
+# "/var/www/site/.tmp", a directory INSIDE the live web root.
+#
+# The absolute-path requirement applies to the remote branch only. There the
+# path crosses to another host, so a relative one would name something else
+# entirely, and ".." would be resolved against that host's tree. A local
+# deploy never leaves this host, so "./site", "out/../site" and "site/"
+# all keep working.
+REMOTE_DIR="$(bh_trim_path "$REMOTE_DIR")"
+validate_remote_dir "$REMOTE_DIR" || exit 1
 if [[ "$DEPLOY_MODE" == "remote" ]]; then
-  # The remote branch hands the path to another host, where a relative path
-  # would name something else entirely.
   require_absolute_path "$REMOTE_DIR" || exit 1
+  require_no_parent_refs "$REMOTE_DIR" 'REMOTE_DIR' || exit 1
 fi
+
 # 1. Local build
 echo "→ Building..."
 npm run build
@@ -181,16 +138,22 @@ if [[ "$DEPLOY_MODE" == "remote" ]]; then
   # stdout and stderr are captured together, so a refusal on the host is
   # shown to the operator here instead of being lost.
   handover_script="$(cat "$BLOG_HANDOVER_SH"; printf '\nstage_blog_into_staging "$1" "$2" || exit 1\n')"
-  handover_out="$(printf '%s\n' "$handover_script" | ssh "$HOST" "sh -s -- ${REMOTE_DIR_Q} ${REMOTE_DIR_TMP_Q}" 2>&1)" || {
-    echo "✗ the blog hand-over failed on $HOST:" >&2
-    printf '%s\n' "$handover_out" >&2
+  # stdout alone is captured, because the confirmation is the only thing
+  # written there. The remote's diagnostics go to stderr, which reaches
+  # this terminal directly, so a refusal is shown to the operator as it
+  # happens instead of being swallowed into a variable.
+  handover_out="$(printf '%s\n' "$handover_script" | ssh "$HOST" "sh -s -- ${REMOTE_DIR_Q} ${REMOTE_DIR_TMP_Q}")" || {
+    echo "✗ the blog hand-over failed on $HOST" >&2
     exit 1
   }
   case "$handover_out" in
-    *"blog-handover: ok"*) ;;
+    "blog-handover: ok (carried "*)
+      ;;
+    "blog-handover: no-blog ("*)
+      echo "  ⚠ the live web root has no blog/ to carry over" >&2
+      ;;
     *)
-      echo "✗ the blog hand-over did not complete on $HOST; refusing to swap:" >&2
-      printf '%s\n' "$handover_out" >&2
+      echo "✗ the blog hand-over did not report success on $HOST; refusing to swap" >&2
       exit 1
       ;;
   esac

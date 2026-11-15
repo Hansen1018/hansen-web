@@ -191,7 +191,7 @@ describe('the remote entry point turns a refusal into an exit status', () => {
   })
 })
 
-describe('the hand-over refuses a tree it cannot carry over', () => {
+describe('the hand-over carries the live blog and refuses the rest', () => {
   it('rejects a live blog that is not a directory', () => {
     // A blog that exists but is not a directory cannot be carried over, and
     // treating it as "no blog here" would drop it at the swap, which is the
@@ -219,12 +219,28 @@ describe('the hand-over refuses a tree it cannot carry over', () => {
 
     const res = handOver(live, staging)
     expect(res.status).toBe(0)
-    expect(res.stdout).toContain('blog-handover: ok')
+    expect(res.stdout).toContain('blog-handover: ok (carried ')
+  })
+
+  it('reports a missing blog/ distinctly from a carried one', () => {
+    // "the live web root has no blog/" is a different fact from "blog/ was
+    // carried over", and the caller checks the marker on stdout alone, so
+    // the two must not be confusable.
+    const dir = scratch()
+    const live = join(dir, 'live')
+    const staging = join(dir, 'staging')
+    mkdirSync(live, { recursive: true })
+    mkdirSync(staging, { recursive: true })
+
+    const res = handOver(live, staging)
+    expect(res.status).toBe(0)
+    expect(res.stdout).toContain('blog-handover: no-blog (')
+    expect(res.stdout).not.toContain('blog-handover: ok')
   })
 })
 
 describe('the module refuses the paths that would be dangerous on its own', () => {
-  it('refuses to create the staging root', () => {
+  it('refuses a staging root that does not exist', () => {
     // Creating it here would let a typo produce a staging tree holding
     // nothing but blog/, and the swap would then replace the whole site
     // with it.
@@ -239,82 +255,117 @@ describe('the module refuses the paths that would be dangerous on its own', () =
     expect(existsSync(staging)).toBe(false)
   })
 
-  it('refuses the root directory as the live web root', () => {
-    const res = handOver('/', '/tmp')
-    expect(res.status).not.toBe(0)
-    expect(res.stderr).toContain('refusing to use /')
-  })
-
-  it('refuses a .. component in the staging root', () => {
+  it('refuses a staging root that is the live web root', () => {
+    // The copy writes into the staging root and the cleanup deletes from
+    // it, so a staging root that holds the live tree would delete the live
+    // blog/ while copying it.
     const dir = scratch()
     const live = join(dir, 'live')
     writeFile(join(live, 'blog', 'feed.json'), 'live')
 
-    // path.join normalizes '..' away, so the path is built literally:
-    // otherwise the module never sees a '..' component at all.
-    const res = handOver(live, dir + '/staging/..')
+    const res = handOver(live, live)
     expect(res.status).not.toBe(0)
-    expect(res.stderr).toContain('..')
+    expect(res.stderr).toContain('same directory')
+  })
+
+  it('refuses a staging root that contains the live web root', () => {
+    const dir = scratch()
+    const live = join(dir, 'live')
+    writeFile(join(live, 'blog', 'feed.json'), 'live')
+
+    const res = handOver(live, dir)
+    expect(res.status).not.toBe(0)
+    expect(res.stderr).toContain('contains the live web root')
+  })
+
+  it('refuses a staging root inside the live web root', () => {
+    const dir = scratch()
+    const live = join(dir, 'live')
+    writeFile(join(live, 'blog', 'feed.json'), 'live')
+    const staging = join(live, 'staging')
+    mkdirSync(staging, { recursive: true })
+
+    const res = handOver(live, staging)
+    expect(res.status).not.toBe(0)
+    expect(res.stderr).toContain('inside the live web root')
+  })
+
+  it('refuses a source tree holding something that is not a file', () => {
+    // A FIFO would make cp block forever, and the failure would only
+    // surface after cp has already waited.
+    const dir = scratch()
+    const live = join(dir, 'live')
+    const staging = join(dir, 'staging')
+    mkdirSync(join(live, 'blog'), { recursive: true })
+    mkdirSync(staging, { recursive: true })
+    const fifo = join(live, 'blog', 'pipe')
+    const mk = spawnSync('mkfifo', [fifo])
+    if (mk.status !== 0) return // no mkfifo here, nothing to assert
+
+    const res = handOver(live, staging)
+    expect(res.status).not.toBe(0)
+    expect(res.stderr).toContain('not a regular file')
   })
 })
 
-describe('deploy.sh normalizes REMOTE_DIR before it deletes anything', () => {
-  // The validation lives in deploy.sh, so it is exercised the way deploy.sh
-  // runs it: the functions are extracted and sourced, then called.
-  function normalize(path: string): string {
-    const src = readFileSync(deployShPath, 'utf8')
-    const begin = '--- remote path validation (begin) ---'
-    const end = '--- remote path validation (end) ---'
-    const i = src.indexOf(begin)
-    const j = src.indexOf(end)
-    if (i === -1 || j === -1) {
-      throw new Error('remote path validation markers not found in deploy.sh')
-    }
-    const block = src.slice(src.indexOf('normalize_remote_dir() {', i), j)
-    const script =
-      'exec 2>&1\n' + block +
-      '\nnormalize_remote_dir "$1" && echo "exit=0" || echo "exit=1"'
-    return execFileSync('bash', ['-c', script, 'normalize-test', path], {
-      encoding: 'utf8',
-    })
+describe('the path rules live in the module, and deploy.sh uses them', () => {
+  // One implementation of what a safe path is: the module checks the roots
+  // it is given, and deploy.sh checks REMOTE_DIR with the same functions.
+  function moduleRun(code: string, path: string): { status: number; out: string } {
+    const res = spawnSync(
+      'sh',
+      ['-c', '. "$1"; shift; ' + code, 'module-test', modulePath, path],
+      {
+        encoding: 'utf8',
+      },
+    )
+    return { status: res.status ?? 1, out: (res.stdout ?? '') + (res.stderr ?? '') }
   }
 
-  function requireAbsolute(path: string): string {
-    const src = readFileSync(deployShPath, 'utf8')
-    const begin = '--- remote path validation (begin) ---'
-    const end = '--- remote path validation (end) ---'
-    const i = src.indexOf(begin)
-    const j = src.indexOf(end)
-    if (i === -1 || j === -1) {
-      throw new Error('remote path validation markers not found in deploy.sh')
-    }
-    const block = src.slice(src.indexOf('normalize_remote_dir() {', i), j)
-    const script =
-      'exec 2>&1\n' + block +
-      '\nrequire_absolute_path "$1" && echo "exit=0" || echo "exit=1"'
-    return execFileSync('bash', ['-c', script, 'absolute-test', path], {
-      encoding: 'utf8',
-    })
+  function isSafe(path: string): boolean {
+    return moduleRun('bh_path_is_safe "$1" REMOTE_DIR', path).status === 0
   }
 
   it('trims a trailing slash, so the staging path stays a sibling', () => {
     // "/var/www/site/" would otherwise derive "/var/www/site/.tmp", a
-    // different directory and one inside the live web root.
-    const out = normalize('/var/www/hansen-web/')
-    expect(out).toContain('exit=0')
-    expect(out.trim().split('\n')[0]).toBe('/var/www/hansen-web')
+    // directory inside the live web root, instead of "/var/www/site.tmp".
+    const res = moduleRun('bh_trim_path "$1"', '/var/www/hansen-web/')
+    expect(res.status).toBe(0)
+    expect(res.out.trim()).toBe('/var/www/hansen-web')
   })
 
   it('refuses every spelling of the root', () => {
-    expect(normalize('/')).toContain('root')
-    expect(normalize('//')).toContain('root')
-    expect(normalize('/./')).toContain('root')
+    for (const root of ['/', '//', '/.', '/./']) {
+      expect(isSafe(root)).toBe(false)
+    }
   })
 
-  it('refuses a relative path in remote mode and a .. component', () => {
-    expect(requireAbsolute('out-dir')).toContain('absolute path')
-    expect(requireAbsolute('/var/www/hansen-web')).toContain('exit=0')
-    expect(normalize('/var/www/../etc')).toContain('..')
+  it('refuses a relative path that climbs above the current directory', () => {
+    // "rm -rf .." deletes a parent the operator never named.
+    expect(isSafe('..')).toBe(false)
+    expect(isSafe('../site')).toBe(false)
+  })
+
+  it('allows the relative paths a local deploy uses', () => {
+    // These worked before this branch and must keep working: a local deploy
+    // never leaves the host.
+    expect(isSafe('site')).toBe(true)
+    expect(isSafe('./site')).toBe(true)
+    expect(isSafe('out/../site')).toBe(true)
+  })
+
+  it('refuses a .. component in remote mode', () => {
+    // The remote host resolves ".." against its own tree, and a symlink
+    // anywhere along the way can make it resolve somewhere else entirely.
+    const res = moduleRun('require_no_parent_refs "$1" REMOTE_DIR', '/var/www/../etc')
+    expect(res.status).not.toBe(0)
+    expect(res.out).toContain("..' component")
+  })
+
+  it('deploy.sh checks REMOTE_DIR with the same function', () => {
+    const src = readFileSync(deployShPath, 'utf8')
+    expect(src).toContain('bh_path_is_safe')
+    expect(src).toContain('bh_trim_path')
   })
 })
 

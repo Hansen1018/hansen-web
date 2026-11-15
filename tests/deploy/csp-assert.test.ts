@@ -275,42 +275,37 @@ describe('the suite can detect a broken rule', () => {
     return file
   }
 
-  function ruleBlock(directive: string, origin: string): string {
-    return [
-      '  if ! csp_has_origin "$policy" ' + directive + ' ' + origin + '; then',
-      '    printf "' + directive + ' with ' + origin + '\\n"',
-      '    status=1',
-      '  fi',
-    ].join('\n')
+  function ruleLine(kind: string, directive: string, value: string): string {
+    return kind + '|' + directive + '|' + value
   }
 
   it('fails when the connect-src jsdelivr rule is removed', () => {
     const src = readFileSync(modulePath, 'utf8')
-    const block = ruleBlock('connect-src', 'https://cdn.jsdelivr.net')
-    if (!src.includes(block)) {
+    const line = ruleLine('origin', 'connect-src', 'https://cdn.jsdelivr.net')
+    if (!src.includes(line)) {
       throw new Error('mutation target not found in deploy/csp-assert.sh')
     }
-    expect(mutantBreaksAnAnchor(writeMutant(src.replace(block, '')))).toBe(true)
+    expect(mutantBreaksAnAnchor(writeMutant(src.replace(line + '\n', '')))).toBe(true)
   })
 
   it('fails when the font-src jsdelivr rule is removed', () => {
     const src = readFileSync(modulePath, 'utf8')
-    const block = ruleBlock('font-src', 'https://cdn.jsdelivr.net')
-    if (!src.includes(block)) {
+    const line = ruleLine('origin', 'font-src', 'https://cdn.jsdelivr.net')
+    if (!src.includes(line)) {
       throw new Error('mutation target not found in deploy/csp-assert.sh')
     }
-    expect(mutantBreaksAnAnchor(writeMutant(src.replace(block, '')))).toBe(true)
+    expect(mutantBreaksAnAnchor(writeMutant(src.replace(line + '\n', '')))).toBe(true)
   })
 
   it('fails when a rule points at the wrong directive', () => {
     const src = readFileSync(modulePath, 'utf8')
-    const target = 'csp_has_origin "$policy" connect-src https://cdn.jsdelivr.net'
-    if (!src.includes(target)) {
+    const line = ruleLine('origin', 'connect-src', 'https://cdn.jsdelivr.net')
+    if (!src.includes(line)) {
       throw new Error('mutation target not found in deploy/csp-assert.sh')
     }
     const mutant = src.replace(
-      target,
-      'csp_has_origin "$policy" connect-srcX https://cdn.jsdelivr.net',
+      line,
+      ruleLine('origin', 'connect-srcX', 'https://cdn.jsdelivr.net'),
     )
     expect(mutantBreaksAnAnchor(writeMutant(mutant))).toBe(true)
   })

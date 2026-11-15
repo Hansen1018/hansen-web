@@ -251,17 +251,14 @@ describe('the rule count is derived from the rules that run', () => {
     // A hard-coded number would not notice a rule disappearing, which is
     // exactly the drift the derived count exists to prevent.
     const src = readFileSync(modulePath, 'utf8')
-    const marker =
-      '  if ! csp_has_origin "$policy" style-src https://cdn.jsdelivr.net; then'
-    const start = src.indexOf(marker)
+    const line = 'origin|style-src|https://cdn.jsdelivr.net'
+    const start = src.indexOf(line)
     if (start === -1) {
       throw new Error('style-src rule not found in deploy/csp-assert.sh')
     }
-    const end = src.indexOf('  fi', start) + '  fi'.length
     const dir = mkdtempSync(join(tmpdir(), 'csp-count-mutant-'))
     const file = join(dir, 'csp-assert.sh')
-    writeFileSync(file, src.slice(0, start) + src.slice(end))
-
+    writeFileSync(file, src.slice(0, start) + src.slice(start + line.length + 1))
     expect(ruleCount(file)).toBe(6)
   })
 })

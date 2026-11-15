@@ -52,20 +52,6 @@
 # verifier: they are the two directives whose absence actually weakens the
 # policy.
 
-# csp_has_origin <policy> <directive> <origin>
-#
-# True when <directive> in <policy> whitelists <origin>. Both ends are
-# anchored on a CSP token boundary, so neither of these is accepted:
-#   - prefix junk, e.g. `connect-src-extra https://cdn.jsdelivr.net;`
-#     (an unknown directive; browsers ignore it)
-#   - lookalike hosts, e.g. `https://cdn.jsdelivr.net.evil.example`
-# All three valid source forms are accepted:
-#   https://cdn.jsdelivr.net;          (origin)
-#   https://cdn.jsdelivr.net/;         (path-prefix)
-#   https://cdn.jsdelivr.net/foo.js;   (specific file)
-# as is the space-separated multi-source form
-# `connect-src https://cdn.jsdelivr.net https://cdnjs.cloudflare.com;`.
-#
 # csp_escape_ere TEXT
 #
 # Escape TEXT so that the ERE in csp_has_origin matches it literally.
@@ -82,11 +68,40 @@
 # The bracket expression puts the closing bracket first, where a bracket
 # expression treats it as a literal, and the backslash is a literal
 # backslash (POSIX bracket expressions do not use backslash as an escape).
-# The set is the ERE metacharacters: . [ ] backslash ^ $ * + ? ( ) { } |
 csp_escape_ere() {
   printf '%s' "$1" | sed 's/[][\\.^$*+?(){}|]/\\&/g'
 }
 
+# csp_fold_policy <policy>
+#
+# Print <policy> with its CR and LF characters replaced by spaces. A CSP
+# header value can be folded across lines, and browsers treat the fold as
+# whitespace inside a source list, so the policy is folded to a single line
+# before it is matched. Without this, grep works line by line and a
+# directive whose source list continues on the next line is reported
+# missing.
+csp_fold_policy() {
+  printf '%s' "$1" | tr '\n\r' '  '
+}
+
+# csp_has_origin <policy> <directive> <origin>
+#
+# True when <directive> in <policy> whitelists <origin>. Both ends are
+# anchored on a CSP token boundary, so neither of these is accepted:
+#   - prefix junk, e.g. `connect-src-extra https://cdn.jsdelivr.net;`
+#     (an unknown directive; browsers ignore it)
+#   - lookalike hosts, e.g. `https://cdn.jsdelivr.net.evil.example`
+# All three valid source forms are accepted:
+#   https://cdn.jsdelivr.net;          (origin)
+#   https://cdn.jsdelivr.net/;         (path-prefix)
+#   https://cdn.jsdelivr.net/foo.js;   (specific file)
+# as is the space-separated multi-source form
+# `connect-src https://cdn.jsdelivr.net https://cdnjs.cloudflare.com;`.
+#
+# The lead-in group cannot cross a ';', so an origin that belongs to a
+# DIFFERENT directive cannot satisfy this rule, and the directive itself
+# has to start the policy or follow a ';', so a directive name inside
+# another directive's source list is not a directive at all.
 csp_has_origin() {
   local policy="${1-}"
   local directive="${2-}"
@@ -105,6 +120,8 @@ csp_has_origin() {
   case "$origin" in
     ''|*[[:space:]]*) return 1 ;;
   esac
+
+  policy="$(csp_fold_policy "$policy")"
 
   escaped_directive="$(csp_escape_ere "$directive")"
   escaped_origin="$(csp_escape_ere "$origin")"
@@ -127,60 +144,67 @@ csp_has_origin() {
     | grep -qiE "(^[[:space:]]*|;[[:space:]]*)${escaped_directive}[[:space:]]+([^;]*[[:space:]])?${escaped_origin}([[:space:];/]|$)"
 }
 
-# csp_rule_count
+# csp_rules
 #
-# How many critical rules csp_missing_directives enforces. The success
-# line in deploy.sh prints this number, so what the operator reads and what
-# the module actually checks cannot drift apart.
+# The critical rules, one per line, as "<kind>|<directive>|<value>":
 #
-# It is derived, not written down: an empty policy fails every rule, and
-# csp_missing_directives prints one label per failed rule, so counting the
-# labels counts the rules. A literal here would go stale the moment a rule
-# was added or removed.
-csp_rule_count() {
-  local labels
-  labels="$(csp_missing_directives '' || true)"
-  printf '%s\n' "$labels" | grep -c . || true
+#   canonical  the directive must carry exactly this value
+#   origin     the directive must whitelist this origin
+#
+# This list is the single source of truth. csp_missing_directives enforces
+# it and csp_rule_count counts it, so the number the operator reads and the
+# rules that actually run cannot drift apart: there is no second list to
+# forget to update.
+csp_rules() {
+  cat <<'RULES'
+canonical|frame-ancestors|'none'
+canonical|default-src|'self'
+origin|connect-src|https://cdn.jsdelivr.net
+origin|font-src|https://cdn.jsdelivr.net
+origin|script-src|https://cdnjs.cloudflare.com
+origin|script-src|https://cdn.jsdelivr.net
+origin|style-src|https://cdn.jsdelivr.net
+RULES
 }
 
+# csp_missing_directives <policy>
 #
 # Prints one label per critical directive the policy is missing, one per
-# line, and returns 1 when any is missing. Returns 0 and prints nothing when
-# the policy satisfies every rule.
+# line, and returns 1 when any is missing. Returns 0 and prints nothing
+# when the policy satisfies every rule.
 csp_missing_directives() {
   local policy="${1-}"
   local status=0
+  local kind directive value
 
-  if ! printf '%s' "$policy" \
-        | grep -qiE "(^[[:space:]]*|;[[:space:]]*)frame-ancestors[[:space:]]+'none'[[:space:]]*(;|$)"; then
-    printf "frame-ancestors 'none'\n"
-    status=1
-  fi
-  if ! printf '%s' "$policy" \
-        | grep -qiE "(^[[:space:]]*|;[[:space:]]*)default-src[[:space:]]+'self'[[:space:]]*(;|$)"; then
-    printf "default-src 'self'\n"
-    status=1
-  fi
-  if ! csp_has_origin "$policy" connect-src https://cdn.jsdelivr.net; then
-    printf "connect-src with https://cdn.jsdelivr.net\n"
-    status=1
-  fi
-  if ! csp_has_origin "$policy" font-src https://cdn.jsdelivr.net; then
-    printf "font-src with https://cdn.jsdelivr.net\n"
-    status=1
-  fi
-  if ! csp_has_origin "$policy" script-src https://cdnjs.cloudflare.com; then
-    printf "script-src with https://cdnjs.cloudflare.com\n"
-    status=1
-  fi
-  if ! csp_has_origin "$policy" script-src https://cdn.jsdelivr.net; then
-    printf "script-src with https://cdn.jsdelivr.net\n"
-    status=1
-  fi
-  if ! csp_has_origin "$policy" style-src https://cdn.jsdelivr.net; then
-    printf "style-src with https://cdn.jsdelivr.net\n"
-    status=1
-  fi
+  policy="$(csp_fold_policy "$policy")"
+
+  while IFS='|' read -r kind directive value; do
+    case "$kind" in
+      canonical)
+        if ! printf '%s' "$policy" \
+              | grep -qiE "(^[[:space:]]*|;[[:space:]]*)${directive}[[:space:]]+${value}[[:space:]]*(;|$)"; then
+          printf '%s %s\n' "$directive" "$value"
+          status=1
+        fi
+        ;;
+      origin)
+        if ! csp_has_origin "$policy" "$directive" "$value"; then
+          printf '%s with %s\n' "$directive" "$value"
+          status=1
+        fi
+        ;;
+    esac
+  done < <(csp_rules)
 
   return $status
+}
+
+# csp_rule_count
+#
+# How many critical rules are enforced. The success line in deploy.sh
+# prints this number, so what the operator reads and what the module
+# actually checks cannot drift apart: both come from csp_rules.
+csp_rule_count() {
+  csp_rules | grep -c .
 }

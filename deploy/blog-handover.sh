@@ -10,9 +10,7 @@
 #
 # The hand-over is deterministic, and it refuses rather than guesses:
 #   - if the staging tree already has a blog/, the two trees disagree about
-#     who owns blog/. That happens when the Next.js export starts shipping
-#     its own blog/ directory (a future route, or an asset copied under
-#     out/blog). Merging them, or letting one silently overwrite the
+#     who owns blog/. Merging them, or letting one silently overwrite the
 #     other, would publish a tree nobody wrote, so the deploy stops;
 #   - the CONTENTS of the source are copied ("src/."), so the tree is
 #     never merged with another one and never nested one level deeper as
@@ -29,7 +27,11 @@
 # typo in the path produce a staging tree holding nothing but blog/, and
 # the swap would then replace the whole site with it.
 #
-# This file DEFINES ONE FUNCTION and nothing else. It is sourced by
+# THE PATH RULES LIVE HERE, and deploy.sh calls these same functions, so
+# there is one implementation of what a safe path is. Two validators that
+# disagree about what is safe are worse than one.
+#
+# This file DEFINES FUNCTIONS and nothing else. It is sourced by
 # deploy.sh for the local branch, and shipped to the host over stdin for
 # the remote branch, so the two paths cannot drift apart. The remote
 # branch appends the call to this file before piping it to "sh -s":
@@ -46,47 +48,186 @@
 # "cp -Rp" rather than "cp -a": -a is a GNU extension, and the remote
 # host's cp is exactly the one whose flavour is unknown.
 #
-# The confirmation line below ("blog-handover: ok ...") is the ONLY thing
-# this function writes to stdout, and it goes there on purpose: the caller
-# captures stdout and checks that the marker is in it, which is how it
-# knows the hand-over actually ran on the host.
+# The confirmation line below is the ONLY thing stage_blog_into_staging
+# writes to stdout, and it goes there on purpose: the caller captures
+# stdout alone and checks the marker in it, which is how it knows the
+# hand-over actually ran. Every diagnostic goes to stderr, so a refusal can
+# never be mistaken for the confirmation.
 
+# bh_trim_path PATH
+#
+# Print PATH with its trailing slashes trimmed.
+#
+# The trailing slash is trimmed because the staging path is derived from
+# it: "/var/www/site/" would derive "/var/www/site/.tmp", a directory
+# INSIDE the live web root, instead of "/var/www/site.tmp", its sibling.
+bh_trim_path() {
+  bh_tp_path="$1"
+  while [ "${bh_tp_path%/}" != "$bh_tp_path" ] && [ "$bh_tp_path" != "/" ]; do
+    bh_tp_path="${bh_tp_path%/}"
+  done
+  printf '%s\n' "$bh_tp_path"
+}
+
+# bh_fold_path PATH
+#
+# Print PATH with its "." components dropped and its ".." components
+# resolved against the components before them, the way the kernel resolves
+# them. A relative path that climbs above the directory it was given
+# relative to prints "..", so the caller can see it.
+#
+# bh_fp_escape is set to 1 when the path climbed above its base.
+bh_fold_path() {
+  bh_fp_in="$1"
+  bh_fp_out=""
+  bh_fp_depth=0
+  bh_fp_escape=0
+  case "$bh_fp_in" in
+    /*) bh_fp_absolute=1 ;;
+    *) bh_fp_absolute=0 ;;
+  esac
+  while [ -n "$bh_fp_in" ]; do
+    case "$bh_fp_in" in
+      */*) bh_fp_comp="${bh_fp_in%%/*}"; bh_fp_in="${bh_fp_in#*/}" ;;
+      *) bh_fp_comp="$bh_fp_in"; bh_fp_in="" ;;
+    esac
+    case "$bh_fp_comp" in
+      ''|'.') ;;
+      '..')
+        if [ "$bh_fp_depth" -gt 0 ]; then
+          bh_fp_depth=$((bh_fp_depth - 1))
+          case "$bh_fp_out" in
+            */*) bh_fp_out="${bh_fp_out%/*}" ;;
+            *) bh_fp_out="" ;;
+          esac
+        else
+          bh_fp_escape=1
+        fi
+        ;;
+      *)
+        bh_fp_depth=$((bh_fp_depth + 1))
+        bh_fp_out="$bh_fp_out/$bh_fp_comp"
+        ;;
+    esac
+  done
+  if [ "$bh_fp_escape" -eq 1 ]; then
+    bh_fp_out=".."
+    return 0
+  fi
+  if [ "$bh_fp_absolute" -eq 1 ]; then
+    bh_fp_out="/${bh_fp_out#/}"
+  else
+    bh_fp_out="${bh_fp_out#/}"
+    [ -n "$bh_fp_out" ] || bh_fp_out="."
+  fi
+  printf '%s\n' "$bh_fp_out"
+}
+
+# bh_path_is_safe PATH LABEL
+#
+# Refuse a path that "rm -rf" would delete something else with.
+#
+# The check is made on the FOLDED path, so it sees what the kernel will
+# actually resolve:
+#   - an empty path;
+#   - a path that resolves to the root ("/", "//", "/.", "/./",
+#     "/a/.."), because "rm -rf" on it deletes the filesystem root;
+#   - a relative path that resolves to the current directory (".",
+#     "a/..") or climbs above it ("..", "../x"): "rm -rf .." deletes a
+#     parent the operator never named;
+#   - an absolute path with a ".." component ("/var/www/site/../etc"),
+#     which resolves to a different directory than it appears to name.
+#
+# A relative path that stays INSIDE the current directory is allowed:
+# "./site", "out/../site" and "site/" all name a directory the operator
+# asked for, and a local deploy never leaves this host.
+bh_path_is_safe() {
+  case "$1" in
+    "")
+      echo "✗ $2 must not be empty" >&2
+      return 1
+      ;;
+  esac
+  bh_fold_path "$1"
+  if [ "$bh_fp_escape" -eq 1 ]; then
+    echo "✗ $2 must not climb above the current directory (got: $1)" >&2
+    return 1
+  fi
+  if [ "$bh_fp_absolute" -eq 1 ]; then
+    if [ "$bh_fp_out" = "/" ]; then
+      echo "✗ $2 must not be the root directory (got: $1)" >&2
+      return 1
+    fi
+    case "/$1/" in
+      */../*)
+        echo "✗ $2 must not contain a '..' component (got: $1)" >&2
+        return 1
+        ;;
+    esac
+  elif [ "$bh_fp_out" = "." ]; then
+    echo "✗ $2 must not be the current directory (got: $1)" >&2
+    return 1
+  fi
+  return 0
+}
+
+# require_no_parent_refs PATH LABEL
+#
+# Refuse a path with a ".." component.
+#
+# This is for the REMOTE branch only. The path is handed to another host,
+# where "a/../b" is resolved against that host's tree and a symlink
+# anywhere along the way can make it resolve somewhere else entirely.
+# Locally the same path names a directory the operator can see.
+require_no_parent_refs() {
+  case "/$1/" in
+    */../*)
+      echo "✗ $2 must not contain a '..' component in remote mode (got: $1)" >&2
+      return 1
+      ;;
+  esac
+  return 0
+}
+
+# stage_blog_into_staging LIVE_ROOT STAGING_ROOT
+#
+# Carry LIVE_ROOT/blog/ into STAGING_ROOT/blog/.
+#
+# The two roots must not be the same directory, must not contain one
+# another, and must not be inside one another: the copy writes into the
+# staging root and the cleanup below deletes from it, so a staging root
+# that holds the live tree would delete the live blog/ while copying it.
 stage_blog_into_staging() {
   bh_live_root=${1-}
   bh_staging_root=${2-}
 
-  # An empty root is not a root. Without this, a lost argument would test
-  # "/blog" (absolute) or "blog" (relative to the current directory) and
-  # quietly copy the wrong tree.
   if [ -z "$bh_live_root" ] || [ -z "$bh_staging_root" ]; then
     echo "error: stage_blog_into_staging needs LIVE_ROOT and STAGING_ROOT" >&2
     return 1
   fi
 
-  # This module is a standalone entry point, so it does not rely on the
-  # caller having validated the paths. "/" and a ".." component are
-  # refused here as well as in deploy.sh.
-  case "$bh_live_root" in
-    /)
-      echo "error: refusing to use / as the live web root" >&2
+  bh_live_root="$(bh_trim_path "$bh_live_root")"
+  bh_staging_root="$(bh_trim_path "$bh_staging_root")"
+
+  # The same rules deploy.sh applies to REMOTE_DIR, from the same file, so
+  # the two cannot drift apart: a path that "rm -rf" would delete something
+  # else with is refused here too.
+  bh_path_is_safe "$bh_live_root" 'the live web root' || return 1
+  bh_path_is_safe "$bh_staging_root" 'the staging root' || return 1
+
+  if [ "$bh_live_root" = "$bh_staging_root" ]; then
+    echo "error: the staging root and the live web root are the same directory ($bh_live_root)" >&2
+    return 1
+  fi
+  case "$bh_live_root/" in
+    "$bh_staging_root/"*)
+      echo "error: the staging root ($bh_staging_root) contains the live web root ($bh_live_root)" >&2
       return 1
       ;;
   esac
-  case "$bh_staging_root" in
-    /)
-      echo "error: refusing to use / as the staging root" >&2
-      return 1
-      ;;
-  esac
-  case "/$bh_live_root/" in
-    */../*)
-      echo "error: the live web root must not contain a '..' component ($bh_live_root)" >&2
-      return 1
-      ;;
-  esac
-  case "/$bh_staging_root/" in
-    */../*)
-      echo "error: the staging root must not contain a '..' component ($bh_staging_root)" >&2
+  case "$bh_staging_root/" in
+    "$bh_live_root/"*)
+      echo "error: the staging root ($bh_staging_root) is inside the live web root ($bh_live_root)" >&2
       return 1
       ;;
   esac
@@ -104,8 +245,17 @@ stage_blog_into_staging() {
       echo "error: $bh_live_root/blog exists but is not a directory; nothing was carried over" >&2
       return 1
     fi
-    echo "blog-handover: ok (no blog/ in the live web root)"
+    echo "blog-handover: no-blog (no blog/ in the live web root)"
     return 0
+  fi
+
+  # A FIFO or a device node would make cp block or fail, and the failure
+  # would surface only after cp has already waited. They are refused
+  # instead, so the deploy stops immediately.
+  bh_special="$(find "$bh_live_root/blog" ! -type f ! -type d ! -type l -print 2>/dev/null | head -n 1)"
+  if [ -n "$bh_special" ]; then
+    echo "error: $bh_special is not a regular file, directory or symlink; the hand-over copies only those" >&2
+    return 1
   fi
 
   # -e misses a dangling symlink, and a link in the staging tree would make
