@@ -79,6 +79,10 @@
 #
 # The character class is the set of ERE metacharacters: . [ ] \ ^ $ * + ?
 # ( ) { } |. Everything else is literal and is left alone.
+# The bracket expression puts the closing bracket first, where a bracket
+# expression treats it as a literal, and the backslash is a literal
+# backslash (POSIX bracket expressions do not use backslash as an escape).
+# The set is the ERE metacharacters: . [ ] backslash ^ $ * + ? ( ) { } |
 csp_escape_ere() {
   printf '%s' "$1" | sed 's/[][\\.^$*+?(){}|]/\\&/g'
 }
@@ -89,10 +93,25 @@ csp_has_origin() {
   local origin="${3-}"
   local escaped_directive escaped_origin
 
+  # A directive or an origin carrying whitespace is more than one token. The
+  # pattern below anchors on token boundaries, so matching such a value would
+  # compare against the wrong part of the policy; it is rejected instead.
+  case "$directive" in
+    *[[:space:]]*) return 1 ;;
+  esac
+  case "$origin" in
+    *[[:space:]]*) return 1 ;;
+  esac
+
   escaped_directive="$(csp_escape_ere "$directive")"
   escaped_origin="$(csp_escape_ere "$origin")"
+  # The origin has to START a token, not merely appear inside one. Without
+  # that, an origin sitting in the query string of another host satisfies the
+  # rule: a policy value of
+  #   script-src 'self' https://example.org/?u=https://cdn.jsdelivr.net
+  # would pass the connect-src rule for https://cdn.jsdelivr.net.
   printf '%s' "$policy" \
-    | grep -qiE "(^|[[:space:];])${escaped_directive}[[:space:]]+[^;]*${escaped_origin}([[:space:];/]|$)"
+    | grep -qiE "(^|[[:space:];])${escaped_directive}[[:space:]]+([^;]*[[:space:]])?${escaped_origin}([[:space:];/]|$)"
 }
 
 # csp_missing_directives <policy>

@@ -67,13 +67,25 @@ npm run build
 # 2. Atomic deploy (prevents serving half-written files)
 if [[ "$DEPLOY_MODE" == "remote" ]]; then
   echo "→ Uploading to $HOST (atomic via tmp dir)..."
-  # Every path that reaches the remote shell is quoted for it. REMOTE_DIR is
-  # overridable through the environment, so an unquoted path is not
-  # hypothetical: measured, a REMOTE_DIR containing a space made the remote
-  # command fail with "too many arguments", and the blog hand-over was then
-  # skipped without an error. rsync is not the problem here: measured, rsync
-  # escapes a space in the remote path itself ('/var/www/han\\ sen web.tmp/').
-  # The remote shell word-splitting the ssh command string is.
+  # REMOTE_DIR reaches the remote shell twice: inside the ssh command
+  # strings and inside the remote path rsync is given. The ssh strings are
+  # quoted below, but rsync builds its own remote command line, so the path
+  # is restricted to a conservative character set rather than trusted: a
+  # REMOTE_DIR that could carry a shell metacharacter is a configuration
+  # error, not something to guess at.
+  #
+  # Measured, with an unquoted REMOTE_DIR containing a space, the remote
+  # guard failed with "too many arguments", so the blog hand-over was
+  # skipped without an error, and the same word-splitting reached
+  # "rm -rf $REMOTE_DIR", which deletes the wrong paths. A local deploy
+  # is unaffected: its paths never leave the local shell.
+  case "$REMOTE_DIR" in
+    *[!A-Za-z0-9._/-]*)
+      echo "error: REMOTE_DIR may only contain letters, digits, '.', '_', '-' and '/'" >&2
+      echo "       (got: $REMOTE_DIR)" >&2
+      exit 1
+      ;;
+  esac
   REMOTE_DIR_Q="$(remote_quote "$REMOTE_DIR")"
   REMOTE_DIR_TMP_Q="$(remote_quote "$REMOTE_DIR.tmp")"
   ssh "$HOST" "mkdir -p ${REMOTE_DIR_TMP_Q}"

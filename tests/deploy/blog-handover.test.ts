@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -136,5 +136,53 @@ describe('deploy.sh wires the shared hand-over into both branches', () => {
     for (const command of remoteCommands) {
       expect(command).not.toMatch(/\$REMOTE_DIR(?!_Q|_TMP_Q)/)
     }
+  })
+})
+
+
+describe('the hand-over refuses rather than guessing', () => {
+  it('rejects empty arguments instead of touching /blog', () => {
+    const res = handOver('', '')
+    expect(res.status).not.toBe(0)
+    expect(res.stderr).toContain('LIVE_ROOT')
+  })
+
+  it('rejects a dangling symlink in the staging tree', () => {
+    // A broken link is not caught by -e, and the copy would write THROUGH
+    // it, outside the web root.
+    const dir = scratch()
+    const live = join(dir, 'live')
+    const staging = join(dir, 'staging')
+    writeFile(join(live, 'blog', 'feed.json'), 'live')
+    mkdirSync(staging, { recursive: true })
+    symlinkSync(join(dir, 'nowhere'), join(staging, 'blog'))
+
+    const res = handOver(live, staging)
+    expect(res.status).not.toBe(0)
+    expect(existsSync(join(dir, 'nowhere'))).toBe(false)
+  })
+})
+
+describe('the remote entry point turns a refusal into an exit status', () => {
+  it('exits non-zero when the hand-over refuses', () => {
+    // deploy.sh runs the module with "sh -s" on the host, so the refusal has
+    // to reach the caller as an exit status, not just a return value.
+    const dir = scratch()
+    const live = join(dir, 'live')
+    const staging = join(dir, 'staging')
+    writeFile(join(live, 'blog', 'feed.json'), 'live')
+    writeFile(join(staging, 'blog', 'page.html'), 'export')
+
+    const result = spawnSync(
+      'sh',
+      ['-s', '--', live, staging],
+      {
+        input: readFileSync(modulePath, 'utf8'),
+        encoding: 'utf8',
+        env: { ...process.env, BLOG_HANDOVER_RUN: '1' },
+      },
+    )
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain('both exist')
   })
 })

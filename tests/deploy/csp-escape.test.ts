@@ -101,3 +101,71 @@ describe('the origin and the directive are matched literally', () => {
     ).toBe(true)
   })
 })
+
+
+describe('a token has to be a single token', () => {
+  it('rejects an origin or a directive carrying whitespace', () => {
+    // The pattern anchors on token boundaries, so a value made of several
+    // tokens would be compared against the wrong part of the policy.
+    expect(
+      hasOrigin('connect-src https://cdn.jsdelivr.net;', 'connect-src', 'https://cdn jsdelivr.net'),
+    ).toBe(false)
+    expect(
+      hasOrigin('connect-src https://cdn.jsdelivr.net;', 'connect src', 'https://cdn.jsdelivr.net'),
+    ).toBe(false)
+  })
+
+  it('does not match an origin sitting inside another host query string', () => {
+    // The origin has to START a token. Without that, this policy satisfied
+    // the connect-src rule for https://cdn.jsdelivr.net even though the
+    // only host in it is example.org.
+    expect(
+      hasOrigin(
+        "connect-src 'self' https://example.org/?u=https://cdn.jsdelivr.net;",
+        'connect-src',
+        'https://cdn.jsdelivr.net',
+      ),
+    ).toBe(false)
+    expect(
+      hasOrigin(
+        'connect-src https://cdn.jsdelivr.net;',
+        'connect-src',
+        'https://cdn.jsdelivr.net',
+      ),
+    ).toBe(true)
+  })
+
+  it('detects the leading-boundary requirement being removed', () => {
+    // If the origin is allowed to appear anywhere in the directive value,
+    // the query-string case above matches again, and the suite would stop
+    // being able to see the defect.
+    const src = readFileSync(modulePath, 'utf8')
+    // Restoring the old shape (anything at all between the directive and
+    // the origin) is the regression: the query-string case then matches.
+    const target = '([^;]*[[:space:]])?'
+    if (!src.includes(target)) {
+      throw new Error('leading-boundary group not found in deploy/csp-assert.sh')
+    }
+    const mutant = src.replace(target, '[^;]*')
+    const dir = mkdtempSync(join(tmpdir(), 'csp-boundary-mutant-'))
+    const file = join(dir, 'csp-assert.sh')
+    writeFileSync(file, mutant)
+
+    const script =
+      'source "$1"\ncsp_has_origin "$2" "$3" "$4" && echo yes || echo no'
+    const out = execFileSync(
+      'bash',
+      [
+        '-c',
+        script,
+        'boundary-mutant',
+        file,
+        "connect-src 'self' https://example.org/?u=https://cdn.jsdelivr.net;",
+        'connect-src',
+        'https://cdn.jsdelivr.net',
+      ],
+      { encoding: 'utf8' },
+    )
+    expect(out.trim()).toBe('yes')
+  })
+})
