@@ -12,6 +12,18 @@
 
 set -euo pipefail
 
+# The CSP critical-directive rules live in deploy/csp-assert.sh so that this
+# verifier and tests/deploy/csp-assert.test.ts exercise one implementation
+# instead of two copies that can drift apart. See that file for the measured
+# evidence behind each rule.
+CSP_ASSERT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CSP_ASSERT_SH="$CSP_ASSERT_DIR/deploy/csp-assert.sh"
+if [[ ! -f "$CSP_ASSERT_SH" ]]; then
+  echo "✗ missing $CSP_ASSERT_SH (deploy.sh needs a full repo checkout)" >&2
+  exit 1
+fi
+. "$CSP_ASSERT_SH"
+
 REMOTE_DIR="${REMOTE_DIR:-/var/www/hansen-web}"
 LOCAL_OUT="${LOCAL_OUT:-out}"
 PUBLIC_URL="${PUBLIC_URL:-https://hansendong.top}"
@@ -159,54 +171,21 @@ else
       # the diagnostic message names WHICH directive(s) actually failed
       # (the previous for-loop broke on first failure but the message
       # listed both, making policy troubleshooting harder).
-      missing_directives=()
-      if ! printf '%s' "$actual_value" \
-            | grep -qiE "(^|[[:space:];])frame-ancestors[[:space:]]+'none'[[:space:]]*(;|$)"; then
+      # --- CSP critical-directive verification (begin) ---
+      # The rules live in deploy/csp-assert.sh, shared with
+      # tests/deploy/csp-assert.test.ts, so the verifier and its test
+      # exercise one implementation. They are anchored to what the deployed
+      # trees actually load, measured on both sites; see that file for the
+      # evidence behind each rule.
+      missing_directives="$(csp_missing_directives "$actual_value" || true)"
+      missing_directives="${missing_directives//$'\n'/ }"
+      if [[ -n "$missing_directives" ]]; then
         weak=1
-        missing_directives+=("frame-ancestors 'none'")
       fi
-      if ! printf '%s' "$actual_value" \
-            | grep -qiE "(^|[[:space:];])default-src[[:space:]]+'self'[[:space:]]*(;|$)"; then
-        weak=1
-        missing_directives+=("default-src 'self'")
-      fi
-
-      # Verifier (PR #6 CodeRabbit review): connect-src must whitelist both CDN
-      # origins. These are required by Artalk emoji plugin (jsdelivr) and theme
-      # chroma highlight / PhotoSwipe (cdnjs). Without these, the verifier
-      # reports CSP success but emoji/plugin fetches silently fail with
-      # `TypeError: Failed to fetch` in atk-error-layer.
-      #
-      # Token-boundary hardening (PR #6 follow-up review): the regex anchors
-      # BOTH ends to reject false positives in the unsafe direction AND to
-      # accept all valid CSP source expression forms:
-      #   - Leading `connect-src[[:space:]]+` rejects prefix-junk directives
-      #     like `connect-src-extra https://cdn.jsdelivr.net;` (unknown to
-      #     browsers but the previous unanchored match accepted as success).
-      #   - Trailing `([[:space:];/]|$)` rejects lookalike hosts
-      #     (`https://cdn.jsdelivr.net.evil.example`) and prefix-junk
-      #     directives — in both cases the char right after the literal CDN
-      #     hostname is not a valid CSP token boundary. Accepts all three
-      #     valid CSP source forms:
-      #       - origin:        `https://cdn.jsdelivr.net;`          (followed by ;)
-      #       - path-prefix:   `https://cdn.jsdelivr.net/;`         (followed by /)
-      #       - specific file: `https://cdn.jsdelivr.net/foo.js;`   (followed by /)
-      #     and space-separator multi-source directives like
-      #       `connect-src https://cdn.jsdelivr.net https://cdnjs.cloudflare.com;`
-      #     (followed by space).
-      if ! printf '%s' "$actual_value" \
-            | grep -qiE "(^|[[:space:];])connect-src[[:space:]]+[^;]*https://cdn\.jsdelivr\.net([[:space:];/]|$)"; then
-        weak=1
-        missing_directives+=("connect-src with https://cdn.jsdelivr.net")
-      fi
-      if ! printf '%s' "$actual_value" \
-            | grep -qiE "(^|[[:space:];])connect-src[[:space:]]+[^;]*https://cdnjs\.cloudflare\.com([[:space:];/]|$)"; then
-        weak=1
-        missing_directives+=("connect-src with https://cdnjs.cloudflare.com")
-      fi
+      # --- CSP critical-directive verification (end) ---
 
       if [[ $weak -eq 1 ]]; then
-        mismatched_headers+=("$header (missing critical directive: ${missing_directives[*]})")
+        mismatched_headers+=("$header (missing critical directive: $missing_directives)")
       fi
     else
       # Case-insensitive compare per RFC 7230 §3.2.4 via POSIX tr (Bash 3.x
