@@ -268,14 +268,16 @@ bh_marker_noblog() {
 # Print PATH with the symlinks in it resolved, when it names a directory
 # that exists. "cd -P" and "pwd -P" are POSIX; "readlink -f" is not, and
 # the remote host's tools are the ones we cannot assume.
-bh_canonical_path() {
+bh_canonical_path() (
+  # The body is a subshell, so the working variable cannot leak into the
+  # shell that sources this file.
   bh_cp_real="$(cd -P "$1" 2>/dev/null && pwd -P)" || bh_cp_real=""
   if [ -n "$bh_cp_real" ]; then
     printf '%s\n' "$bh_cp_real"
   else
     printf '%s\n' "$1"
   fi
-}
+)
 
 # stage_blog_into_staging LIVE_ROOT STAGING_ROOT
 #

@@ -370,9 +370,11 @@ describe('the path rules live in the module, and deploy.sh uses them', () => {
   })
 
   it('deploy.sh checks REMOTE_DIR with the same function', () => {
+    // deploy.sh must not carry its own copy of the path rules: it calls the
+    // module's functions, so the two cannot disagree about what is safe.
     const src = readFileSync(deployShPath, 'utf8')
     expect(src).toContain('bh_path_is_safe')
-    expect(src).toContain('bh_trim_path')
+    expect(src).toContain('bh_folded_path')
   })
 })
 
