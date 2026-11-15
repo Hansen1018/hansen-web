@@ -147,6 +147,11 @@ bh_path_is_safe() {
       echo "✗ $2 must not be empty" >&2
       return 1
       ;;
+    -*)
+      # "rm -rf "-rf"" would read the path as an OPTION, not as a path.
+      echo "✗ $2 must not start with '-' (got: $1)" >&2
+      return 1
+      ;;
   esac
   bh_fold_path "$1"
   if [ "$bh_fp_escape" -eq 1 ]; then

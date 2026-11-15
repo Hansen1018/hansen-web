@@ -207,6 +207,22 @@ describe('the origin may be the first source in the directive value', () => {
     ).toBe(false)
   })
 
+  it('matches a policy whose FIRST directive is at the very start', () => {
+    // The leading anchor is explicit, not an accident of the alternation:
+    // the directive has to start the policy, or follow a ';'. This pins the
+    // start-of-policy case so it cannot regress silently.
+    expect(
+      hasOrigin('connect-src https://cdn.jsdelivr.net', 'connect-src', 'https://cdn.jsdelivr.net'),
+    ).toBe(true)
+    expect(
+      hasOrigin(
+        "default-src 'self'; connect-src https://cdn.jsdelivr.net",
+        'connect-src',
+        'https://cdn.jsdelivr.net',
+      ),
+    ).toBe(true)
+  })
+
   it('matches the directive and the origin case-insensitively', () => {
     // CSP directive names and host names are case-insensitive, so
     // CONNECT-SRC has to satisfy the connect-src rule. Kept deliberately:

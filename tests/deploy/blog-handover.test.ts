@@ -346,6 +346,13 @@ describe('the path rules live in the module, and deploy.sh uses them', () => {
     expect(isSafe('../site')).toBe(false)
   })
 
+  it('refuses a path that starts with a dash', () => {
+    // "rm -rf '-rf'" reads the path as an OPTION, not as a path, so the
+    // guard has to refuse it before it reaches the destructive line.
+    expect(isSafe('-rf')).toBe(false)
+    expect(isSafe('--no-preserve-root')).toBe(false)
+  })
+
   it('allows the relative paths a local deploy uses', () => {
     // These worked before this branch and must keep working: a local deploy
     // never leaves the host.
