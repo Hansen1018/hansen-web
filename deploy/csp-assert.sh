@@ -104,6 +104,19 @@ csp_fold_policy() {
 # another directive's source list is not a directive at all.
 csp_has_origin() {
   local policy="${1-}"
+  policy="$(csp_fold_policy "$policy")"
+  csp_has_origin_folded "$policy" "${2-}" "${3-}"
+}
+
+# csp_has_origin_folded <folded policy> <directive> <origin>
+#
+# The matcher on a policy that is ALREADY folded.
+#
+# csp_has_origin folds the policy and calls this. csp_missing_directives
+# folds the policy ONCE and calls this directly, so a policy is not folded
+# again for every rule that is checked against it.
+csp_has_origin_folded() {
+  local policy="${1-}"
   local directive="${2-}"
   local origin="${3-}"
   local escaped_directive escaped_origin
@@ -120,8 +133,6 @@ csp_has_origin() {
   case "$origin" in
     ''|*[[:space:]]*) return 1 ;;
   esac
-
-  policy="$(csp_fold_policy "$policy")"
 
   escaped_directive="$(csp_escape_ere "$directive")"
   escaped_origin="$(csp_escape_ere "$origin")"
@@ -265,7 +276,10 @@ csp_missing_directives() {
         fi
         ;;
       origin)
-        if ! csp_has_origin "$policy" "$directive" "$value"; then
+        # The policy is already folded above, so the matcher that
+        # takes a folded policy is used here: folding it again for
+        # every rule is work that buys nothing.
+        if ! csp_has_origin_folded "$policy" "$directive" "$value"; then
           printf '%s with %s\n' "$directive" "$value"
           status=1
         fi

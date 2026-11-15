@@ -171,7 +171,15 @@ if [[ "$DEPLOY_MODE" == "remote" ]]; then
   # The expected confirmations come from the module's own functions, so the
   # wording lives in one place and the comparison is EXACT. A prefix match
   # would accept a stdout that merely starts with the marker.
-  expected_ok="$(bh_marker_ok "$REMOTE_DIR")"
+  # The guarantee is therefore: stdout must match exactly, otherwise the
+  # swap is refused. An empty, truncated or otherwise unexpected stdout
+  # matches neither marker and refuses the deploy.
+  # The remote side trims the path it is given before it builds the
+  # marker, so the expected marker is built from the trimmed path as
+  # well. Both sides then compute the same string, and the exact
+  # comparison does not depend on the two spellings happening to be
+  # equal.
+  expected_ok="$(bh_marker_ok "$(bh_trim_path "$REMOTE_DIR")")"
   expected_noblog="$(bh_marker_noblog)"
   case "$handover_out" in
     "$expected_ok")

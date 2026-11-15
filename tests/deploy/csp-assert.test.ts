@@ -60,6 +60,14 @@ const LOOKALIKE = policy({
   'font-src': FONT_WITH_JS,
 })
 
+// The same lookalike host with a trailing path. The origin has to be
+// anchored at its END as well as at its start, so the path form is
+// rejected as well and not only the bare host.
+const LOOKALIKE_WITH_PATH = policy({
+  'connect-src': "'self' https://cdn.jsdelivr.net.evil.example/",
+  'font-src': FONT_WITH_JS,
+})
+
 function missingFor(policyText: string, moduleFile: string = modulePath): string[] {
   const script = 'source "$1"; csp_missing_directives "$2" || true'
   const out = execFileSync('bash', ['-c', script, 'csp-test', moduleFile, policyText], {
@@ -182,6 +190,10 @@ describe('csp_missing_directives', () => {
 
   it('rejects a lookalike host', () => {
     expect(missingFor(LOOKALIKE)).toEqual(['connect-src with https://cdn.jsdelivr.net'])
+  })
+
+  it('rejects the lookalike host with a trailing path too', () => {
+    expect(missingFor(LOOKALIKE_WITH_PATH)).toEqual(['connect-src with https://cdn.jsdelivr.net'])
   })
 
   it('accepts the path-prefix and the specific-file source form', () => {
