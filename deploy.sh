@@ -9,9 +9,14 @@
 #   LOCAL_PORT — fallback local healthcheck port (default 8081)
 #   REMOTE_DIR — override destination path (default /var/www/hansen-web).
 #                A local deploy accepts a relative path ("site", "./site",
-#                "out/../site"), but refuses ".", "..", any path with a
-#                ".." component, and any path that starts with "-": those
-#                are refused before the build, not after it.
+#                "out/../site"): the check is on the FOLDED path, so a
+#                path that folds to a directory inside the current one is
+#                accepted. It refuses "", ".", "..", a path that folds to
+#                the current directory or above ("a/..", "x/../../y"), an
+#                absolute path that contains a ".." component, and any
+#                path that starts with "-": those are refused before the
+#                build, not after it. Remote mode requires an absolute
+#                path and refuses ".." anywhere in it.
 #   LOCAL_OUT  — override build output dir (default out)
 
 set -euo pipefail
@@ -197,8 +202,9 @@ if [[ "$DEPLOY_MODE" == "remote" ]]; then
   # The guarantee is therefore: stdout must match exactly, otherwise the
   # swap is refused. An empty, truncated or otherwise unexpected stdout
   # matches neither marker and refuses the deploy.
-  # The remote side trims the path it is given before it builds the
-  # marker, so the expected marker is built from the trimmed path as
+  # The remote side trims BOTH roots it is given before it builds any
+  # marker, and every marker it builds comes from the trimmed live
+  # root, so the expected marker is built from the trimmed path as
   # well. Both sides then compute the same string, and the exact
   # comparison does not depend on the two spellings happening to be
   # equal.
@@ -359,15 +365,38 @@ else
       # exercise one implementation. They are anchored to what the deployed
       # trees actually load, measured on both sites; see that file for the
       # evidence behind each rule.
-      missing_directives="$(csp_missing_directives "$actual_value" || true)"
-      missing_directives="${missing_directives//$'\n'/ }"
-      if [[ -n "$missing_directives" ]]; then
+      # The module reports two different things on stdout: a problem with
+      # the rule list (a "!!" marker) and a gap in the served policy. They
+      # are not the same fault: a rule list this repository cannot parse
+      # is a fault HERE, while a directive the served policy does not
+      # carry is a fault in the deployment. They are kept apart here so
+      # the report says which one it is.
+      csp_findings="$(csp_missing_directives "$actual_value" || true)"
+      missing_directives=""
+      rule_list_problems=""
+      while IFS= read -r csp_line; do
+        [ -n "$csp_line" ] || continue
+        case "$csp_line" in
+          '!!'*)
+            rule_list_problems="${rule_list_problems:+$rule_list_problems }${csp_line#!!}"
+            ;;
+          *)
+            missing_directives="${missing_directives:+$missing_directives }$csp_line"
+            ;;
+        esac
+      done <<< "$csp_findings"
+      if [[ -n "$missing_directives" || -n "$rule_list_problems" ]]; then
         weak=1
       fi
       # --- CSP critical-directive verification (end) ---
 
       if [[ $weak -eq 1 ]]; then
-        mismatched_headers+=("$header (missing critical directive: $missing_directives)")
+        if [[ -n "$rule_list_problems" ]]; then
+          mismatched_headers+=("$header (the CSP rule list could not be used: $rule_list_problems)")
+        fi
+        if [[ -n "$missing_directives" ]]; then
+          mismatched_headers+=("$header (missing critical directive: $missing_directives)")
+        fi
       fi
     else
       # Case-insensitive compare per RFC 7230 §3.2.4 via POSIX tr (Bash 3.x

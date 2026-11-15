@@ -84,7 +84,8 @@ function missingFor(policyText: string, moduleFile: string = modulePath): string
 function wiredCheck(
   policyText: string,
   deploySource: string = readFileSync(deployShPath, 'utf8'),
-): { weak: number; missing: string } {
+  moduleFile: string = modulePath,
+): { weak: number; missing: string; ruleList: string } {
   const begin = '# --- CSP critical-directive verification (begin) ---'
   const end = '# --- CSP critical-directive verification (end) ---'
   const i = deploySource.indexOf(begin)
@@ -96,19 +97,22 @@ function wiredCheck(
   const script = [
     'set -uo pipefail',
     'missing_directives=""',
+    'rule_list_problems=""',
     'weak=0',
     'actual_value="$1"',
     '. "$2"',
     block,
     'echo "weak=$weak"',
     'echo "missing=$missing_directives"',
+    'echo "rulelist=$rule_list_problems"',
   ].join('\n')
-  const out = execFileSync('bash', ['-c', script, 'wire-test', policyText, modulePath], {
+  const out = execFileSync('bash', ['-c', script, 'wire-test', policyText, moduleFile], {
     encoding: 'utf8',
   })
   const weak = out.match(/^weak=(\d+)$/m)?.[1] ?? ''
   const missing = out.match(/^missing=(.*)$/m)?.[1] ?? ''
-  return { weak: Number(weak), missing }
+  const ruleList = out.match(/^rulelist=(.*)$/m)?.[1] ?? ''
+  return { weak: Number(weak), missing, ruleList }
 }
 
 describe('csp_missing_directives', () => {
@@ -394,6 +398,59 @@ describe('the rule list fails closed when it is wrong', () => {
     const file = moduleWithRules('')
     const res = cspRun(COMPLETE, file)
     expect(res.stdout).toContain('no critical rules are defined')
+  })
+
+  it('refuses a rule whose directive is not one token', () => {
+    // A directive with whitespace in it names something that cannot be
+    // compared with a policy at a token boundary. The origin branch
+    // already refused such a value; the canonical branch is now held to
+    // the same rule, at the parse point, so neither kind of rule can be
+    // compared with the wrong part of the policy.
+    const file = moduleWithRules("canonical|de fault-src|'self'\n")
+    const res = cspRun(COMPLETE, file)
+    expect(res.stdout).toContain('malformed rule')
+  })
+
+  it('refuses a rule whose value is not one token', () => {
+    // The same rule for the value: two sources in one field are two
+    // rules, not one, and the parser cannot tell which one was meant.
+    const file = moduleWithRules('origin|connect-src|https://cdn.jsdelivr.net https://cdn.example\n')
+    const res = cspRun(COMPLETE, file)
+    expect(res.stdout).toContain('malformed rule')
+  })
+
+  it('counts only the rules that can be compared with a policy', () => {
+    // A rule that names no token cannot be enforced, so it must not be
+    // counted as a rule that ran: the number the operator reads has to
+    // be the number of rules that ran.
+    const file = moduleWithRules("canonical|de fault-src|'self'\n")
+    const count = Number(
+      execFileSync('bash', ['-c', 'source "$1"; csp_rule_count', 'count-test', file], {
+        encoding: 'utf8',
+      }).trim(),
+    )
+    expect(count).toBe(0)
+  })
+
+  it('tells a broken rule list apart from an empty one', () => {
+    // The rules ARE defined; they just cannot run. Saying "no critical
+    // rules are defined" there would blame an empty list for a broken
+    // one, and the operator would go looking in the wrong place.
+    const file = moduleWithRules('origins|connect-src|https://cdn.jsdelivr.net\n')
+    const res = cspRun(COMPLETE, file)
+    expect(res.stdout).toContain('no critical rule could be enforced')
+    expect(res.stdout).not.toContain('no critical rules are defined')
+  })
+
+  it('reports a broken rule list as a fault in the rule list, not as a gap in the policy', () => {
+    // deploy.sh has to say WHICH fault it is: a rule list this
+    // repository cannot parse is not the same as a directive the served
+    // policy does not carry.
+    const file = moduleWithRules('origins|connect-src|https://cdn.jsdelivr.net\n')
+    const res = wiredCheck(COMPLETE, readFileSync(deployShPath, 'utf8'), file)
+    expect(res.weak).toBe(1)
+    expect(res.missing).toBe('')
+    expect(res.ruleList).toContain('unknown rule kind')
   })
 })
 

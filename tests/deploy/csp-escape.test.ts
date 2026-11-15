@@ -235,6 +235,19 @@ describe('the origin may be the first source in the directive value', () => {
 })
 
 describe('an empty directive or origin is rejected', () => {
+  it('refuses to escape an empty text', () => {
+    // An empty pattern in an ERE matches EVERY text, so an escape that
+    // produced nothing would make a rule pass for any policy at all.
+    // The escape refuses instead, and the caller treats a refused
+    // escape as a rule that is NOT satisfied.
+    const out = execFileSync(
+      'bash',
+      ['-c', 'source "$1"; csp_escape_ere "" && echo yes || echo no', 'escape-test', modulePath],
+      { encoding: 'utf8' },
+    )
+    expect(out.trim()).toBe('no')
+  })
+
   // This is a security assertion, so it fails closed: an empty value would
   // otherwise match a pattern that matches almost anything.
   it('rejects an empty directive', () => {

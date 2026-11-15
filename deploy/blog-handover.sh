@@ -178,6 +178,10 @@ bh_fold_path() (
 #
 # The body is a subshell, so the folded path it computes stays here.
 bh_path_is_safe() (
+  # The two arguments are read with a default, so a call that forgets one
+  # gets this function's own message instead of an "unbound variable"
+  # error from the "set -u" of the shell that sources this file.
+  set -- "${1-}" "${2:-the path}"
   case "$1" in
     "")
       echo "✗ $2 must not be empty" >&2

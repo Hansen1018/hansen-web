@@ -68,8 +68,36 @@
 # The bracket expression puts the closing bracket first, where a bracket
 # expression treats it as a literal, and the backslash is a literal
 # backslash (POSIX bracket expressions do not use backslash as an escape).
+# csp_rule_field_is_valid <field>
+#
+# A rule field is ONE token: not empty, and carrying no whitespace. A
+# field with whitespace in it names something that cannot be compared
+# with a policy at a token boundary, so it is refused here rather than
+# handed to a matcher.
+csp_rule_field_is_valid() {
+  case "${1-}" in
+    '') return 1 ;;
+    *[[:space:]]*) return 1 ;;
+  esac
+  return 0
+}
+
 csp_escape_ere() {
-  printf '%s' "$1" | sed 's/[][\\.^$*+?(){}|]/\\&/g'
+  # An empty TEXT has no escaped form, and an empty pattern in an ERE
+  # matches EVERY text, so handing one to a matcher would make a rule
+  # pass for any policy at all. The same is true when the "sed" itself
+  # fails: the result would be empty as well. Both cases are refused
+  # here, and the non-zero status tells the caller that the rule cannot
+  # be evaluated, so the rule is reported as NOT satisfied.
+  if [ -z "${1-}" ]; then
+    return 1
+  fi
+  local csp_ee_out
+  csp_ee_out="$(printf '%s' "$1" | sed 's/[][\\.^$*+?(){}|]/\\&/g')" || return 1
+  if [ -z "$csp_ee_out" ]; then
+    return 1
+  fi
+  printf '%s' "$csp_ee_out"
 }
 
 # csp_fold_policy <policy>
@@ -134,8 +162,14 @@ csp_has_origin_folded() {
     ''|*[[:space:]]*) return 1 ;;
   esac
 
-  escaped_directive="$(csp_escape_ere "$directive")"
-  escaped_origin="$(csp_escape_ere "$origin")"
+  # The escape has to produce something. An empty pattern matches every
+  # text, so a failed escape would make this rule pass for any policy at
+  # all; the rule is reported as NOT satisfied instead, which is the
+  # direction that fails closed.
+  if ! escaped_directive="$(csp_escape_ere "$directive")" ||
+     ! escaped_origin="$(csp_escape_ere "$origin")"; then
+    return 1
+  fi
   # The origin has to START a token, not merely appear inside one. Without
   # that, an origin sitting in the query string of another host satisfies the
   # rule: a policy value of
@@ -242,8 +276,17 @@ csp_rule_list() {
         continue
         ;;
     esac
-    if [ -z "$directive" ] || [ -z "$value" ]; then
-      # A rule with a missing field enforces nothing, so it is not a rule.
+    # A directive and a value are each ONE token: a rule names one
+    # directive and one source, and a field that carries whitespace
+    # names something that cannot be compared with a policy at a token
+    # boundary. Both kinds are held to this rule HERE, at the parse
+    # point, so a rule that cannot be compared with a policy never
+    # reaches a matcher and never counts as a rule that ran.
+    if [ -z "$directive" ] || [ -z "$value" ] ||
+       ! csp_rule_field_is_valid "$directive" ||
+       ! csp_rule_field_is_valid "$value"; then
+      # A rule with a missing field, or with a field that is not one
+      # token, enforces nothing, so it is not a rule.
       printf '!!malformed rule: %s\n' "$line"
       continue
     fi
@@ -255,6 +298,7 @@ csp_missing_directives() {
   local policy="${1-}"
   local status=0
   local rule_count=0
+  local broken_rules=0
   local kind directive value
   local canonical_directive canonical_value
   local line rest
@@ -270,7 +314,12 @@ csp_missing_directives() {
     # run must not be invisible there.
     case "$line" in
       '!!'*)
-        printf '%s\n' "${line#!!}"
+        # The marker is KEPT on stdout, so the caller can tell a fault in
+        # the rule list from a gap in the served policy: a rule list that
+        # cannot be parsed is a fault in this repository, not something
+        # the served policy is missing.
+        printf '%s\n' "$line"
+        broken_rules=$(( ${broken_rules:-0} + 1 ))
         status=1
         continue
         ;;
@@ -287,7 +336,7 @@ csp_missing_directives() {
         # that did not come out whole. It is refused rather than parsed
         # as a rule with the wrong fields, which would enforce nothing
         # while being counted as a rule that ran.
-        printf "malformed rule: %s\n" "$line"
+        printf "!!malformed rule: %s\n" "$line"
         status=1
         continue
         ;;
@@ -296,7 +345,7 @@ csp_missing_directives() {
       canonical|origin)
         ;;
       *)
-        printf "unknown rule kind: %s\n" "$kind"
+        printf "!!unknown rule kind: %s\n" "$kind"
         status=1
         continue
         ;;
@@ -337,8 +386,17 @@ csp_missing_directives() {
   # ran at all, so it fails instead. The label goes to stdout as well,
   # because the caller reads stdout to decide what to report.
   if [ "$rule_count" -eq 0 ]; then
-    echo "no critical rules are defined"
-    echo "the CSP rule list is empty; refusing to report the policy as verified" >&2
+    # A rule list that is NOT empty but cannot be read is a different
+    # fault: the rules ARE defined, they just cannot run. Saying "no
+    # critical rules are defined" there would blame an empty list for a
+    # broken one, so the two are reported apart.
+    if [ "${broken_rules:-0}" -gt 0 ]; then
+      echo "!!no critical rule could be enforced"
+      echo "the CSP rule list is broken; refusing to report the policy as verified" >&2
+    else
+      echo "!!no critical rules are defined"
+      echo "the CSP rule list is empty; refusing to report the policy as verified" >&2
+    fi
     status=1
   fi
 

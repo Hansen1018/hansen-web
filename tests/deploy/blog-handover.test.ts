@@ -145,6 +145,17 @@ describe('deploy.sh wires the shared hand-over into both branches', () => {
 
 
 describe('the hand-over refuses rather than guessing', () => {
+  it('reports its own message when it is called without its arguments', () => {
+    // The shell that sources this file runs under "set -u", so a bare
+    // "$1" aborted the whole deploy with an "unbound variable" error
+    // instead of this function's own message.
+    const res = spawnSync('sh', ['-c', 'set -u; . "$1"; bh_path_is_safe', 'module-test', modulePath], {
+      encoding: 'utf8',
+    })
+    expect(res.stderr).toContain('must not be empty')
+    expect(res.stderr).not.toContain('unbound variable')
+  })
+
   it('rejects empty arguments instead of touching /blog', () => {
     const res = handOver('', '')
     expect(res.status).not.toBe(0)
