@@ -45,8 +45,9 @@ LOCAL_PORT="${LOCAL_PORT:-8081}"
 # quote survives the word splitting the remote shell performs on the command
 # string. REMOTE_DIR is overridable through the environment, so this is not
 # hypothetical: measured, an unquoted REMOTE_DIR containing a space made the
-# remote guard fail with "too many arguments", and the blog hand-over was
-# then skipped without an error.
+# remote guard fail with "too many arguments", so the blog hand-over was
+# skipped without an error, and the same word splitting reached the
+# "rm -rf $REMOTE_DIR" line, which deletes the wrong paths.
 remote_quote() {
   printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
 }
@@ -112,13 +113,9 @@ if [[ "$DEPLOY_MODE" == "remote" ]]; then
   # the sibling REMOTE_DIR.tmp and not REMOTE_DIR/.tmp.
   #
   # What is left can still contain a space or a quote, so every path that
-  # reaches the remote shell is quoted below. rsync builds its own remote
+  # reaches the remote shell is quoted with remote_quote, whose comment
+  # carries the measurement behind that quoting. rsync builds its own remote
   # command line and escapes the path itself, so it needs nothing extra.
-  #
-  # Measured, with an unquoted REMOTE_DIR containing a space, the remote
-  # guard failed with "too many arguments", so the blog hand-over was
-  # skipped without an error, and the same word-splitting reached
-  # "rm -rf $REMOTE_DIR", which deletes the wrong paths.
   REMOTE_DIR_Q="$(remote_quote "$REMOTE_DIR")"
   REMOTE_DIR_TMP_Q="$(remote_quote "$REMOTE_DIR.tmp")"
   ssh "$HOST" "mkdir -p ${REMOTE_DIR_TMP_Q}"
