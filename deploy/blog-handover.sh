@@ -140,14 +140,6 @@ bh_fold_path() (
   fi
 )
 
-# bh_folded_path PATH
-#
-# Print PATH folded. An alias for bh_fold_path, kept because the hand-over
-# reads better with the two names.
-bh_folded_path() {
-  bh_fold_path "$1"
-}
-
 # bh_path_is_safe PATH LABEL
 #
 # Refuse a path that "rm -rf" would delete something else with.
@@ -260,7 +252,7 @@ bh_marker_ok() {
 # over. That is a different fact from a completed hand-over, so it is a
 # different marker.
 bh_marker_noblog() {
-  printf 'blog-handover: no-blog (no blog/ in the live web root)\n'
+  printf 'blog-handover: no-blog (no blog/ in %s)\n' "$1"
 }
 
 # bh_canonical_path PATH
@@ -287,13 +279,18 @@ bh_canonical_path() (
 # another, and must not be inside one another: the copy writes into the
 # staging root and the cleanup below deletes from it, so a staging root
 # that holds the live tree would delete the live blog/ while copying it.
-stage_blog_into_staging() {
+# The body is a subshell, so the variables it computes (the roots, the
+# folded paths, the error strings) stay inside it and do not leak into
+# the shell that sourced this file. "return" inside a subshell body is not
+# portable in dash ("can only return from a function or sourced script"),
+# so the body leaves with "exit" and the caller sees the same status.
+stage_blog_into_staging() (
   bh_live_root=${1-}
   bh_staging_root=${2-}
 
   if [ -z "$bh_live_root" ] || [ -z "$bh_staging_root" ]; then
     echo "error: stage_blog_into_staging needs LIVE_ROOT and STAGING_ROOT" >&2
-    return 1
+    exit 1
   fi
 
   bh_live_root="$(bh_trim_path "$bh_live_root")"
@@ -302,15 +299,15 @@ stage_blog_into_staging() {
   # The same rules deploy.sh applies to REMOTE_DIR, from the same file, so
   # the two cannot drift apart: a path that "rm -rf" would delete something
   # else with is refused here too.
-  bh_path_is_safe "$bh_live_root" 'the live web root' || return 1
-  bh_path_is_safe "$bh_staging_root" 'the staging root' || return 1
+  bh_path_is_safe "$bh_live_root" 'the live web root' || exit 1
+  bh_path_is_safe "$bh_staging_root" 'the staging root' || exit 1
 
   # The comparisons are made on the FOLDED paths and on the paths with
   # their symlinks resolved. Comparing the raw strings would miss two
   # roots that name the same directory through different spellings, and
   # that is the case where the copy and the cleanup destroy the live tree.
-  bh_live_folded="$(bh_folded_path "$bh_live_root")"
-  bh_staging_folded="$(bh_folded_path "$bh_staging_root")"
+  bh_live_folded="$(bh_fold_path "$bh_live_root")"
+  bh_staging_folded="$(bh_fold_path "$bh_staging_root")"
   bh_live_real="$(bh_canonical_path "$bh_live_folded")"
   bh_staging_real="$(bh_canonical_path "$bh_staging_folded")"
   # The copy, the inspection and the cleanup work on the FOLDED roots: the
@@ -320,24 +317,24 @@ stage_blog_into_staging() {
 
   if [ "$bh_live_real" = "$bh_staging_real" ]; then
     echo "error: the staging root and the live web root are the same directory ($bh_live_real)" >&2
-    return 1
+    exit 1
   fi
   case "$bh_live_real/" in
     "$bh_staging_real/"*)
       echo "error: the staging root ($bh_staging_real) contains the live web root ($bh_live_real)" >&2
-      return 1
+      exit 1
       ;;
   esac
   case "$bh_staging_real/" in
     "$bh_live_real/"*)
       echo "error: the staging root ($bh_staging_real) is inside the live web root ($bh_live_real)" >&2
-      return 1
+      exit 1
       ;;
   esac
 
   if [ ! -d "$bh_staging_dir" ]; then
     echo "error: the staging root $bh_staging_dir does not exist or is not a directory" >&2
-    return 1
+    exit 1
   fi
 
   if [ ! -d "$bh_live_dir/blog" ]; then
@@ -349,14 +346,14 @@ stage_blog_into_staging() {
       # as a plain file, and saying so tells the operator which one it is.
       echo "error: $bh_live_dir/blog is a symlink that does not resolve to a directory;" >&2
       echo "       nothing was carried over" >&2
-      return 1
+      exit 1
     fi
     if [ -e "$bh_live_dir/blog" ]; then
       echo "error: $bh_live_dir/blog exists but is not a directory; nothing was carried over" >&2
-      return 1
+      exit 1
     fi
-    bh_marker_noblog
-    return 0
+    bh_marker_noblog "$bh_live_root"
+    exit 0
   fi
 
   # A FIFO or a device node would make cp block or fail, and the failure
@@ -373,7 +370,7 @@ stage_blog_into_staging() {
   # visible.
   bh_special_all="$(find "$bh_live_dir/blog" ! -type f ! -type d ! -type l -print)" || {
     echo "error: could not inspect $bh_live_dir/blog for non-regular files" >&2
-    return 1
+    exit 1
   }
   bh_special="$(printf '%s
 ' "$bh_special_all" | sed -n '1p')"
@@ -382,7 +379,7 @@ stage_blog_into_staging() {
   # below names the first line of it.
   if [ -n "$bh_special_all" ]; then
     echo "error: $bh_special is not a regular file, directory or symlink; the hand-over copies only those" >&2
-    return 1
+    exit 1
   fi
 
   # -e misses a dangling symlink, and a link in the staging tree would make
@@ -393,7 +390,7 @@ stage_blog_into_staging() {
     echo "       The live web root and this build disagree about who owns blog/." >&2
     echo "       Merging them, or letting one silently overwrite the other, would" >&2
     echo "       publish a tree nobody wrote. Resolve it and deploy again." >&2
-    return 1
+    exit 1
   fi
 
   # The remote host's sh has no "set -e", so every step is checked here.
@@ -405,7 +402,7 @@ stage_blog_into_staging() {
     if [ -n "$bh_mkdir_err" ]; then
       echo "       $bh_mkdir_err" >&2
     fi
-    return 1
+    exit 1
   }
 
   bh_cp_err="$(cp -Rp "$bh_live_dir/blog/." "$bh_staging_dir/blog/" 2>&1)" || {
@@ -421,9 +418,9 @@ stage_blog_into_staging() {
       echo "warning: could not remove the partial $bh_staging_dir/blog;" >&2
       echo "         remove it before the next deploy" >&2
     fi
-    return 1
+    exit 1
   }
 
   bh_marker_ok "$bh_live_root"
-  return 0
-}
+  exit 0
+)

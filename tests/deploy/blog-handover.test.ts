@@ -374,7 +374,7 @@ describe('the path rules live in the module, and deploy.sh uses them', () => {
     // module's functions, so the two cannot disagree about what is safe.
     const src = readFileSync(deployShPath, 'utf8')
     expect(src).toContain('bh_path_is_safe')
-    expect(src).toContain('bh_folded_path')
+    expect(src).toContain('bh_fold_path')
   })
 })
 
@@ -454,7 +454,9 @@ describe('the remote hand-over writes exactly one line to stdout', () => {
 
     const res = remoteHandover(live, staging)
     expect(res.status).toBe(0)
-    expect(res.stdout).toBe('blog-handover: no-blog (no blog/ in the live web root)\n')
+    // The marker names the web root that was inspected, so the operator
+    // can confirm it is the expected one before the swap.
+    expect(res.stdout).toBe('blog-handover: no-blog (no blog/ in ' + live + ')\n')
   })
 
   it('matches the confirmation deploy.sh compares against', () => {

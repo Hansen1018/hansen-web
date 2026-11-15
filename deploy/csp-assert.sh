@@ -162,6 +162,13 @@ csp_has_origin_folded() {
 #   canonical  the directive must carry exactly this value
 #   origin     the directive must whitelist this origin
 #
+# The two kinds differ on purpose. A canonical rule asks whether the
+# directive carries that value and nothing else, so "default-src 'self'
+# https://x" is reported as missing: the extra source widens the policy
+# and the rule is about the policy being exactly what was measured. An origin
+# rule asks whether the directive whitelists one origin, so the other
+# sources beside it are allowed.
+#
 # This list is the single source of truth. csp_missing_directives enforces
 # it and csp_rule_count counts it, so the number the operator reads and the
 # rules that actually run cannot drift apart: there is no second list to
@@ -262,6 +269,35 @@ csp_missing_directives() {
     rest="${line#*|}"
     directive="${rest%%|*}"
     value="${rest#*|}"
+    case "$rest" in
+      *'|'*)
+        : ;;
+      *)
+        # A line that is neither a rule nor a "!!" label is a rule list
+        # that did not come out whole. It is refused rather than parsed
+        # as a rule with the wrong fields, which would enforce nothing
+        # while being counted as a rule that ran.
+        printf "malformed rule: %s\n" "$line"
+        status=1
+        continue
+        ;;
+    esac
+    case "$kind" in
+      canonical|origin)
+        ;;
+      *)
+        printf "unknown rule kind: %s\n" "$kind"
+        status=1
+        continue
+        ;;
+    esac
+    if [ -z "$value" ]; then
+      printf "malformed rule: %s\n" "$line"
+      status=1
+      continue
+    fi
+    # The count is incremented only for a rule that is enforced below,
+    # so it counts the same rules csp_rule_count counts.
     rule_count=$((rule_count + 1))
     case "$kind" in
       canonical)

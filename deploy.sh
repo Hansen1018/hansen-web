@@ -7,7 +7,11 @@
 # Environment overrides:
 #   PUBLIC_URL — healthcheck URL (default https://hansendong.top)
 #   LOCAL_PORT — fallback local healthcheck port (default 8081)
-#   REMOTE_DIR — override destination path (default /var/www/hansen-web)
+#   REMOTE_DIR — override destination path (default /var/www/hansen-web).
+#                A local deploy accepts a relative path ("site", "./site",
+#                "out/../site"), but refuses ".", "..", any path with a
+#                ".." component, and any path that starts with "-": those
+#                are refused before the build, not after it.
 #   LOCAL_OUT  — override build output dir (default out)
 
 set -euo pipefail
@@ -116,7 +120,7 @@ if [[ "$DEPLOY_MODE" == "remote" ]]; then
   # first would hide the very component the check is about.
   require_no_parent_refs "$REMOTE_DIR" 'REMOTE_DIR' || exit 1
 fi
-REMOTE_DIR="$(bh_folded_path "$REMOTE_DIR")"
+REMOTE_DIR="$(bh_fold_path "$REMOTE_DIR")"
 validate_remote_dir "$REMOTE_DIR" || exit 1
 if [[ "$DEPLOY_MODE" == "remote" ]]; then
   require_absolute_path "$REMOTE_DIR" 'REMOTE_DIR' || exit 1
@@ -180,12 +184,15 @@ if [[ "$DEPLOY_MODE" == "remote" ]]; then
   # comparison does not depend on the two spellings happening to be
   # equal.
   expected_ok="$(bh_marker_ok "$(bh_trim_path "$REMOTE_DIR")")"
-  expected_noblog="$(bh_marker_noblog)"
+  # The "no blog/" marker carries the path the remote inspected, so the
+  # operator can see WHICH web root was looked at, and a remote that
+  # inspected a different root does not match this marker.
+  expected_noblog="$(bh_marker_noblog "$(bh_trim_path "$REMOTE_DIR")")"
   case "$handover_out" in
     "$expected_ok")
       ;;
     "$expected_noblog")
-      echo "  ⚠ the live web root has no blog/ to carry over" >&2
+      echo "  ⚠ the live web root $(bh_trim_path "$REMOTE_DIR") has no blog/ to carry over" >&2
       ;;
     *)
       echo "✗ the blog hand-over did not report success on $HOST (ssh exit $handover_status); refusing to swap" >&2
