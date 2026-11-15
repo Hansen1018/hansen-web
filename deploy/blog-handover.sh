@@ -166,6 +166,16 @@ bh_fold_path() (
 # "./site", "out/../site" and "site/" all name a directory the operator
 # asked for, and a local deploy never leaves this host.
 #
+# The fold is LEXICAL: a ".." component is resolved by cancelling
+# names, without following symlinks, while the kernel resolves it
+# physically, after following them. The two can therefore name
+# different directories, and a caller that folds a path and then
+# operates on the folded value works on a tree the operator did not
+# name. A ".." component is refused outright in remote mode
+# (require_no_parent_refs, before this fold) and is allowed in local
+# mode only where the kernel agrees with the fold
+# (bh_fold_agrees_with_kernel).
+#
 # The body is a subshell, so the folded path it computes stays here.
 bh_path_is_safe() (
   case "$1" in
@@ -235,12 +245,38 @@ bh_path_is_safe() (
 require_no_parent_refs() {
   case "/$1/" in
     */../*)
-      echo "✗ $2 must not contain a '..' component in remote mode (got: $1)" >&2
+      echo "✗ $2 must not contain a '..' component (got: $1)" >&2
       return 1
       ;;
   esac
   return 0
 }
+
+# bh_fold_agrees_with_kernel PATH
+#
+# True when the FOLDED path names the same directory the kernel would
+# resolve PATH to.
+#
+# The fold resolves ".." lexically, without following symlinks, while the
+# kernel resolves it physically, after following them. For a path like
+# "link/../x", where "link" is a symlink, the two name DIFFERENT
+# directories, and the deploy would then work on a tree the operator did
+# not name. When the path cannot be resolved at all (it does not exist
+# yet) there is nothing to compare, and the path is allowed: nothing
+# exists to be resolved differently.
+bh_fold_agrees_with_kernel() (
+  bh_fak_given="$(bh_trim_path "$1")"
+  bh_fak_folded="$(bh_fold_path "$bh_fak_given")"
+  # A path that does not exist cannot name two different directories, so
+  # there is nothing to disagree about and the path is allowed.
+  bh_fak_real="$(cd -P "$bh_fak_given" 2>/dev/null && pwd -P)" || exit 0
+  bh_fak_folded_real="$(cd -P "$bh_fak_folded" 2>/dev/null && pwd -P)" || exit 0
+  if [ "$bh_fak_real" != "$bh_fak_folded_real" ]; then
+    echo "✗ $2 resolves to a different directory once '..' is folded (got: $1)" >&2
+    exit 1
+  fi
+  exit 0
+)
 
 # bh_marker_ok LIVE_ROOT
 #
@@ -248,8 +284,15 @@ require_no_parent_refs() {
 # hand-over wrote against this same function, so the wording lives here
 # only: a reworded message cannot silently turn a successful hand-over
 # into a failed deploy.
+#
+# The path is trimmed and folded HERE, the way the hand-over folds the
+# root it is given, so the confirmation names the tree that was actually
+# operated on: a caller that passes an unfolded root ("./site",
+# "out/../site") gets a confirmation that names the folded tree, and the
+# caller computing the expected value with this same function gets the
+# same string.
 bh_marker_ok() {
-  printf 'blog-handover: ok (carried %s/blog)\n' "$1"
+  printf 'blog-handover: ok (carried %s/blog)\n' "$(bh_fold_path "$(bh_trim_path "$1")")"
 }
 
 # bh_marker_noblog LIVE_ROOT
@@ -258,7 +301,7 @@ bh_marker_ok() {
 # over. That is a different fact from a completed hand-over, so it is a
 # different marker.
 bh_marker_noblog() {
-  printf 'blog-handover: no-blog (no blog/ in %s)\n' "$1"
+  printf 'blog-handover: no-blog (no blog/ in %s)\n' "$(bh_fold_path "$(bh_trim_path "$1")")"
 }
 
 # bh_marker_noroot LIVE_ROOT
@@ -269,7 +312,7 @@ bh_marker_noblog() {
 # is a first deploy to a host that has nothing there yet, the second is a
 # site that is there without the blog.
 bh_marker_noroot() {
-  printf 'blog-handover: no-root (no web root at %s)\n' "$1"
+  printf 'blog-handover: no-root (no web root at %s)\n' "$(bh_fold_path "$(bh_trim_path "$1")")"
 }
 
 # bh_canonical_path PATH
@@ -313,6 +356,15 @@ stage_blog_into_staging() (
 
   bh_live_root="$(bh_trim_path "$bh_live_root")"
   bh_staging_root="$(bh_trim_path "$bh_staging_root")"
+
+  # The fold resolves ".." lexically, while the kernel resolves it
+  # physically, after following symlinks, so a path like "link/../x"
+  # can name two different directories depending on which rule is applied.
+  # When they disagree, the hand-over would carry the blog/ of one tree
+  # into the other and the cleanup would delete from the wrong one, so
+  # the path is refused instead.
+  bh_fold_agrees_with_kernel "$bh_live_root" 'the live web root' || exit 1
+  bh_fold_agrees_with_kernel "$bh_staging_root" 'the staging root' || exit 1
 
   # The same rules deploy.sh applies to REMOTE_DIR, from the same file, so
   # the two cannot drift apart: a path that "rm -rf" would delete something

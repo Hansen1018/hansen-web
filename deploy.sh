@@ -120,6 +120,18 @@ if [[ "$DEPLOY_MODE" == "remote" ]]; then
   # first would hide the very component the check is about.
   require_no_parent_refs "$REMOTE_DIR" 'REMOTE_DIR' || exit 1
 fi
+if [[ "$DEPLOY_MODE" != "remote" ]]; then
+  # The fold resolves ".." lexically, while the kernel resolves it
+  # physically, after following symlinks, so a path like
+  # "link/../x" can name two different directories. When they
+  # disagree, the deploy would work on a tree the operator did not
+  # name, so the path is refused. A path that does not exist yet
+  # cannot disagree, so a first deploy to a new directory still
+  # works. This is the LOCAL branch only: in remote mode the path
+  # is resolved on the other host, and require_no_parent_refs
+  # already refuses a ".." component there.
+  bh_fold_agrees_with_kernel "$REMOTE_DIR" REMOTE_DIR || exit 1
+fi
 REMOTE_DIR="$(bh_fold_path "$REMOTE_DIR")"
 validate_remote_dir "$REMOTE_DIR" || exit 1
 if [[ "$DEPLOY_MODE" == "remote" ]]; then
@@ -174,8 +186,11 @@ if [[ "$DEPLOY_MODE" == "remote" ]]; then
   # what decides. A pipeline can be non-zero because the local writer
   # got SIGPIPE while the remote had already succeeded, and that must
   # not abort a hand-over that worked.
-  handover_status=0
-  handover_out="$(printf '%s\n' "$handover_script" | ssh "$HOST" "sh -s -- ${REMOTE_DIR_Q} ${REMOTE_DIR_TMP_Q}")" || handover_status=$?
+  # The expected confirmations are built BEFORE the hand-over runs, so
+  # they are computed from the same local state the hand-over is about
+  # to be compared against, and a failure to build them is a local
+  # error rather than something that looks like a refusal from the
+  # host.
   # The expected confirmations come from the module's own functions, so the
   # wording lives in one place and the comparison is EXACT. A prefix match
   # would accept a stdout that merely starts with the marker.
@@ -187,31 +202,32 @@ if [[ "$DEPLOY_MODE" == "remote" ]]; then
   # well. Both sides then compute the same string, and the exact
   # comparison does not depend on the two spellings happening to be
   # equal.
-  expected_ok="$(bh_marker_ok "$(bh_trim_path "$REMOTE_DIR")")"
+  expected_ok="$(bh_marker_ok "$REMOTE_DIR")"
   # The "no blog/" marker carries the path the remote inspected, so the
   # operator can see WHICH web root was looked at, and a remote that
   # inspected a different root does not match this marker.
-  expected_noblog="$(bh_marker_noblog "$(bh_trim_path "$REMOTE_DIR")")"
+  expected_noblog="$(bh_marker_noblog "$REMOTE_DIR")"
   # The "no web root" marker is a different fact from the "no blog/" marker:
   # the live web root is not there at all (a first deploy to a host that
   # has nothing yet), versus a web root that IS there without the blog.
   # Saying which one it is means a mistyped REMOTE_DIR is visible instead
   # of silent.
-  expected_noroot="$(bh_marker_noroot "$(bh_trim_path "$REMOTE_DIR")")"
-  case "$handover_out" in
-    "$expected_ok")
-      ;;
-    "$expected_noblog")
-      echo "  ⚠ the live web root $(bh_trim_path "$REMOTE_DIR") has no blog/ to carry over" >&2
-      ;;
-    "$expected_noroot")
-      echo "  ⚠ the live web root $(bh_trim_path "$REMOTE_DIR") does not exist on $HOST; nothing to carry over" >&2
-      ;;
-    *)
-      echo "✗ the blog hand-over did not report success on $HOST (ssh exit $handover_status); refusing to swap" >&2
-      exit 1
-      ;;
-  esac
+  expected_noroot="$(bh_marker_noroot "$REMOTE_DIR")"
+  handover_status=0
+  handover_out="$(printf '%s\n' "$handover_script" | ssh "$HOST" "sh -s -- ${REMOTE_DIR_Q} ${REMOTE_DIR_TMP_Q}")" || handover_status=$?
+  # The comparison is a plain string equality, so it cannot be a pattern
+  # match: a path may contain "*", "[" or "?", and a pattern would let a
+  # stdout that is NOT the expected marker match anyway.
+  if [ "$handover_out" = "$expected_ok" ]; then
+    :
+  elif [ "$handover_out" = "$expected_noblog" ]; then
+    echo "  ⚠ the live web root $REMOTE_DIR$ has no blog/ to carry over" >&2
+  elif [ "$handover_out" = "$expected_noroot" ]; then
+    echo "  ⚠ the live web root $REMOTE_DIR$ does not exist on $HOST$; nothing to carry over" >&2
+  else
+    echo "✗ the blog hand-over did not report success on $HOST$ (ssh exit $handover_status); refusing to swap" >&2
+    exit 1
+  fi
   ssh "$HOST" "rm -rf ${REMOTE_DIR_Q} && mv ${REMOTE_DIR_TMP_Q} ${REMOTE_DIR_Q}"
 else
   echo "→ Deploying locally to $REMOTE_DIR (atomic via tmp dir)..."

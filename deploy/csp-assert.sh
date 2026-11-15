@@ -197,6 +197,16 @@ RULES
 # stdout instead of silently checking fewer rules than it says.
 csp_rule_list() {
   local line kind rest directive value
+  local rules
+  # The rules are read into a variable first, so a failed read is
+  # VISIBLE: the caller sees a "!!" label like any other problem with
+  # the list, instead of an empty list that reads as "there are no
+  # rules". A rule list that could not be read must not look like a
+  # rule list that was checked and found nothing.
+  if ! rules="$(csp_rules)"; then
+    printf '!!could not read the CSP rule list\n'
+    return 1
+  fi
   while IFS= read -r line; do
     case "$line" in
       ''|'#'*)
@@ -238,7 +248,7 @@ csp_rule_list() {
       continue
     fi
     printf '%s|%s|%s\n' "$kind" "$directive" "$value"
-  done < <(csp_rules)
+  done < <(printf '%s\n' "$rules")
 }
 
 csp_missing_directives() {
