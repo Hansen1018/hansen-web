@@ -61,13 +61,16 @@
 # The trailing slash is trimmed because the staging path is derived from
 # it: "/var/www/site/" would derive "/var/www/site/.tmp", a directory
 # INSIDE the live web root, instead of "/var/www/site.tmp", its sibling.
-bh_trim_path() {
+bh_trim_path() (
+  # The body is a subshell, so the working variable cannot leak into the
+  # caller's shell. POSIX sh has no "local", and this file is sourced into
+  # deploy.sh, where a stray variable is one rename away from a bug.
   bh_tp_path="$1"
   while [ "${bh_tp_path%/}" != "$bh_tp_path" ] && [ "$bh_tp_path" != "/" ]; do
     bh_tp_path="${bh_tp_path%/}"
   done
   printf '%s\n' "$bh_tp_path"
-}
+)
 
 # bh_fold_path PATH
 #
@@ -123,6 +126,18 @@ bh_fold_path() {
   printf '%s\n' "$bh_fp_out"
 }
 
+# bh_folded_path PATH
+#
+# Print PATH folded, the way the kernel resolves it: its "." components
+# dropped and its ".." components resolved against the components before
+# them. This is the printable form of what bh_fold_path computes.
+bh_folded_path() {
+  # bh_fold_path prints nothing here: its output would land in the middle
+  # of the hand-over's stdout.
+  bh_fold_path "$1" >/dev/null
+  printf '%s\n' "$bh_fp_out"
+}
+
 # bh_path_is_safe PATH LABEL
 #
 # Refuse a path that "rm -rf" would delete something else with.
@@ -147,13 +162,29 @@ bh_path_is_safe() {
       echo "✗ $2 must not be empty" >&2
       return 1
       ;;
+  esac
+  # A newline in the path would break the confirmation protocol: the marker
+  # is one line, and a path with a newline in it spans two.
+  bh_nl='
+'
+  case "$1" in
+    *"$bh_nl"*)
+      echo "✗ $2 must not contain a newline (got: $1)" >&2
+      return 1
+      ;;
+  esac
+  # The folded path is taken from bh_fp_out, and NOTHING is printed here:
+  # this function runs inside the hand-over, and a line on stdout would
+  # land in front of the confirmation the caller checks.
+  bh_fold_path "$1" >/dev/null
+  # The check is on the FOLDED path, so "./-rf" is judged as "-rf": it
+  # reaches "rm -rf" as an OPTION, not as a path.
+  case "$bh_fp_out" in
     -*)
-      # "rm -rf "-rf"" would read the path as an OPTION, not as a path.
       echo "✗ $2 must not start with '-' (got: $1)" >&2
       return 1
       ;;
   esac
-  bh_fold_path "$1"
   if [ "$bh_fp_escape" -eq 1 ]; then
     echo "✗ $2 must not climb above the current directory (got: $1)" >&2
     return 1
@@ -194,6 +225,39 @@ require_no_parent_refs() {
   return 0
 }
 
+# bh_marker_ok LIVE_ROOT
+#
+# Print the confirmation the caller checks. The caller compares what the
+# hand-over wrote against this same function, so the wording lives here
+# only: a reworded message cannot silently turn a successful hand-over
+# into a failed deploy.
+bh_marker_ok() {
+  printf 'blog-handover: ok (carried %s/blog)\n' "$1"
+}
+
+# bh_marker_noblog
+#
+# Print the confirmation for a live web root that has no blog/ to carry
+# over. That is a different fact from a completed hand-over, so it is a
+# different marker.
+bh_marker_noblog() {
+  printf 'blog-handover: no-blog (no blog/ in the live web root)\n'
+}
+
+# bh_canonical_path PATH
+#
+# Print PATH with the symlinks in it resolved, when it names a directory
+# that exists. "cd -P" and "pwd -P" are POSIX; "readlink -f" is not, and
+# the remote host's tools are the ones we cannot assume.
+bh_canonical_path() {
+  bh_cp_real="$(cd -P "$1" 2>/dev/null && pwd -P)" || bh_cp_real=""
+  if [ -n "$bh_cp_real" ]; then
+    printf '%s\n' "$bh_cp_real"
+  else
+    printf '%s\n' "$1"
+  fi
+}
+
 # stage_blog_into_staging LIVE_ROOT STAGING_ROOT
 #
 # Carry LIVE_ROOT/blog/ into STAGING_ROOT/blog/.
@@ -220,19 +284,28 @@ stage_blog_into_staging() {
   bh_path_is_safe "$bh_live_root" 'the live web root' || return 1
   bh_path_is_safe "$bh_staging_root" 'the staging root' || return 1
 
-  if [ "$bh_live_root" = "$bh_staging_root" ]; then
-    echo "error: the staging root and the live web root are the same directory ($bh_live_root)" >&2
+  # The comparisons are made on the FOLDED paths and on the paths with
+  # their symlinks resolved. Comparing the raw strings would miss two
+  # roots that name the same directory through different spellings, and
+  # that is the case where the copy and the cleanup destroy the live tree.
+  bh_live_folded="$(bh_folded_path "$bh_live_root")"
+  bh_staging_folded="$(bh_folded_path "$bh_staging_root")"
+  bh_live_real="$(bh_canonical_path "$bh_live_folded")"
+  bh_staging_real="$(bh_canonical_path "$bh_staging_folded")"
+
+  if [ "$bh_live_real" = "$bh_staging_real" ]; then
+    echo "error: the staging root and the live web root are the same directory ($bh_live_real)" >&2
     return 1
   fi
-  case "$bh_live_root/" in
-    "$bh_staging_root/"*)
-      echo "error: the staging root ($bh_staging_root) contains the live web root ($bh_live_root)" >&2
+  case "$bh_live_real/" in
+    "$bh_staging_real/"*)
+      echo "error: the staging root ($bh_staging_real) contains the live web root ($bh_live_real)" >&2
       return 1
       ;;
   esac
-  case "$bh_staging_root/" in
-    "$bh_live_root/"*)
-      echo "error: the staging root ($bh_staging_root) is inside the live web root ($bh_live_root)" >&2
+  case "$bh_staging_real/" in
+    "$bh_live_real/"*)
+      echo "error: the staging root ($bh_staging_real) is inside the live web root ($bh_live_real)" >&2
       return 1
       ;;
   esac
@@ -246,18 +319,33 @@ stage_blog_into_staging() {
     # A blog that exists but is not a directory cannot be carried over, and
     # treating it as "no blog here" would drop it at the swap, which is the
     # 404 this script exists to prevent.
-    if [ -e "$bh_live_root/blog" ] || [ -L "$bh_live_root/blog" ]; then
+    if [ -L "$bh_live_root/blog" ]; then
+      # A link that does not resolve to a directory is not the same thing
+      # as a plain file, and saying so tells the operator which one it is.
+      echo "error: $bh_live_root/blog is a symlink that does not resolve to a directory;" >&2
+      echo "       nothing was carried over" >&2
+      return 1
+    fi
+    if [ -e "$bh_live_root/blog" ]; then
       echo "error: $bh_live_root/blog exists but is not a directory; nothing was carried over" >&2
       return 1
     fi
-    echo "blog-handover: no-blog (no blog/ in the live web root)"
+    bh_marker_noblog
     return 0
   fi
 
   # A FIFO or a device node would make cp block or fail, and the failure
   # would surface only after cp has already waited. They are refused
   # instead, so the deploy stops immediately.
-  bh_special="$(find "$bh_live_root/blog" ! -type f ! -type d ! -type l -print 2>/dev/null | head -n 1)"
+  # "head -n 1" is deliberately not used here: it exits as soon as it
+  # has a line, "find" then dies of SIGPIPE, and under "set -o pipefail"
+  # that fails the whole pipeline and aborts the deploy before the message
+  # below is printed. "sed -n 1p" reads the whole stream, so "find"
+  # finishes normally, and find's own error stays visible.
+  bh_special="$(find "$bh_live_root/blog" ! -type f ! -type d ! -type l -print | sed -n '1p')" || {
+    echo "error: could not inspect $bh_live_root/blog for non-regular files" >&2
+    return 1
+  }
   if [ -n "$bh_special" ]; then
     echo "error: $bh_special is not a regular file, directory or symlink; the hand-over copies only those" >&2
     return 1
@@ -302,6 +390,6 @@ stage_blog_into_staging() {
     return 1
   }
 
-  echo "blog-handover: ok (carried $bh_live_root/blog)"
+  bh_marker_ok "$bh_live_root"
   return 0
 }

@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -325,5 +325,56 @@ describe('the repository layout the suite assumes', () => {
   it('has deploy.sh and the shared rules module where the suite looks for them', () => {
     expect(existsSync(deployShPath)).toBe(true)
     expect(existsSync(modulePath)).toBe(true)
+  })
+})
+
+describe('the rule list fails closed when it is wrong', () => {
+  function moduleWithRules(rules: string): string {
+    const dir = mkdtempSync(join(tmpdir(), 'csp-rules-'))
+    const file = join(dir, 'csp-assert.sh')
+    const src = readFileSync(modulePath, 'utf8')
+    const replaced = src.replace(
+      /cat <<'RULES'[\s\S]*?\nRULES\n/,
+      "cat <<'RULES'\n" + rules + 'RULES\n',
+    )
+    if (replaced === src) throw new Error('the rule list was not found in the module')
+    writeFileSync(file, replaced)
+    return file
+  }
+
+  // spawnSync, not execFileSync: execFileSync returns stdout only, and
+  // these cases are about what the module writes to stderr.
+  function cspRun(policyText: string, moduleFile: string) {
+    const script = 'source "$1"; csp_missing_directives "$2" || true'
+    const out = spawnSync('bash', ['-c', script, 'csp-test', moduleFile, policyText], {
+      encoding: 'utf8',
+    })
+    return { stdout: out.stdout ?? '', stderr: out.stderr ?? '' }
+  }
+
+  it('fails when a rule kind is misspelled', () => {
+    // A typo in the kind would leave a rule that does not run counting as
+    // a rule that was checked.
+    const file = moduleWithRules('origins|connect-src|https://cdn.jsdelivr.net\n')
+    const res = cspRun(COMPLETE, file)
+    expect(res.stderr).toContain('unknown rule kind')
+  })
+
+  it('fails when the rule list is empty', () => {
+    // An empty list would report every policy as verified while no rule
+    // ran at all.
+    const file = moduleWithRules('')
+    const res = cspRun(COMPLETE, file)
+    expect(res.stdout).toContain('no critical rules are defined')
+  })
+})
+
+describe('a policy folded across lines is still matched', () => {
+  it('matches an origin whose source list continues on the next line', () => {
+    // A CSP header can be folded across lines, and browsers treat the fold
+    // as whitespace inside a source list.
+    const folded = "connect-src 'self'\n  https://cdn.jsdelivr.net;"
+    const missing = missingFor(folded)
+    expect(missing.join(' ')).not.toContain('connect-src')
   })
 })

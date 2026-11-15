@@ -179,11 +179,36 @@ csp_missing_directives() {
 
   policy="$(csp_fold_policy "$policy")"
 
+  local rule_count=0
+  local canonical_directive canonical_value
+
   while IFS='|' read -r kind directive value; do
+    # A blank line is not a rule, so it is skipped here and in
+    # csp_rule_count: the number the operator reads and the rules that run
+    # are the same set.
+    case "$kind" in
+      '')
+        continue
+        ;;
+      canonical|origin)
+        rule_count=$((rule_count + 1))
+        ;;
+      *)
+        # An unknown kind is a typo. Silently skipping it would leave a rule
+        # that does not run counting as a rule that was checked.
+        echo "unknown rule kind: $kind" >&2
+        status=1
+        continue
+        ;;
+    esac
     case "$kind" in
       canonical)
+        # The directive and the value are escaped like the origin below, so
+        # a rule written with a '.' or a '+' cannot match something else.
+        canonical_directive="$(csp_escape_ere "$directive")"
+        canonical_value="$(csp_escape_ere "$value")"
         if ! printf '%s' "$policy" \
-              | grep -qiE "(^[[:space:]]*|;[[:space:]]*)${directive}[[:space:]]+${value}[[:space:]]*(;|$)"; then
+              | grep -qiE "(^[[:space:]]*|;[[:space:]]*)${canonical_directive}[[:space:]]+${canonical_value}[[:space:]]*(;|$)"; then
           printf '%s %s\n' "$directive" "$value"
           status=1
         fi
@@ -197,6 +222,15 @@ csp_missing_directives() {
     esac
   done < <(csp_rules)
 
+  # An empty rule list would report every policy as verified while no rule
+  # ran at all, so it fails instead. The label goes to stdout as well,
+  # because the caller reads stdout to decide what to report.
+  if [ "$rule_count" -eq 0 ]; then
+    echo "no critical rules are defined"
+    echo "the CSP rule list is empty; refusing to report the policy as verified" >&2
+    status=1
+  fi
+
   return $status
 }
 
@@ -206,5 +240,9 @@ csp_missing_directives() {
 # prints this number, so what the operator reads and what the module
 # actually checks cannot drift apart: both come from csp_rules.
 csp_rule_count() {
-  csp_rules | grep -c .
+  # The count is the number of rules that run, and it skips the blank lines
+  # the enforcement loop skips. "grep -c" exits 1 when it counts nothing,
+  # so the exit status is ignored: the number is a display, and an empty
+  # rule list is caught where it matters, in csp_missing_directives.
+  csp_rules | grep -c '^[^|]' || true
 }

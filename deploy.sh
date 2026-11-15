@@ -66,7 +66,7 @@ require_absolute_path() {
   case "$1" in
     /*) return 0 ;;
     *)
-      echo "✗ REMOTE_DIR must be an absolute path in remote mode (got: $1)" >&2
+      echo "✗ ${2:-REMOTE_DIR} must be an absolute path in remote mode (got: $1)" >&2
       return 1
       ;;
   esac
@@ -80,6 +80,18 @@ if [[ -n "${1:-}" ]]; then
   HOSTNAME="${HOST##*@}"
 else
   DEPLOY_MODE="local"
+fi
+
+# HOST is typed by the operator and reaches ssh and rsync as a remote
+# spec. Whitespace in it splits that spec, so it is refused here rather
+# than quoted into the wrong place.
+if [[ "$DEPLOY_MODE" == "remote" ]]; then
+  case "$HOST" in
+    *[[:space:]]*)
+      echo "✗ the host must not contain whitespace (got: $HOST)" >&2
+      exit 1
+      ;;
+  esac
 fi
 
 # Checked before the build, so a bad path fails in a second rather than
@@ -96,7 +108,7 @@ fi
 REMOTE_DIR="$(bh_trim_path "$REMOTE_DIR")"
 validate_remote_dir "$REMOTE_DIR" || exit 1
 if [[ "$DEPLOY_MODE" == "remote" ]]; then
-  require_absolute_path "$REMOTE_DIR" || exit 1
+  require_absolute_path "$REMOTE_DIR" 'REMOTE_DIR' || exit 1
   require_no_parent_refs "$REMOTE_DIR" 'REMOTE_DIR' || exit 1
 fi
 
@@ -134,7 +146,11 @@ if [[ "$DEPLOY_MODE" == "remote" ]]; then
   #
   # stdout and stderr are captured together, so a refusal on the host is
   # shown to the operator here instead of being lost.
-  handover_script="$(cat "$BLOG_HANDOVER_SH"; printf '\nstage_blog_into_staging "$1" "$2" || exit 1\n')"
+  handover_module="$(cat "$BLOG_HANDOVER_SH")" || {
+    echo "✗ could not read $BLOG_HANDOVER_SH" >&2
+    exit 1
+  }
+  handover_script="$(printf '%s\n%s\n' "$handover_module" 'stage_blog_into_staging "$1" "$2" || exit 1')"
   # stdout alone is captured, because the confirmation is the only thing
   # written there. The remote's diagnostics go to stderr, which reaches
   # this terminal directly, so a refusal is shown to the operator as it
@@ -143,10 +159,15 @@ if [[ "$DEPLOY_MODE" == "remote" ]]; then
     echo "✗ the blog hand-over failed on $HOST" >&2
     exit 1
   }
+  # The expected confirmations come from the module's own functions, so the
+  # wording lives in one place and the comparison is EXACT. A prefix match
+  # would accept a stdout that merely starts with the marker.
+  expected_ok="$(bh_marker_ok "$REMOTE_DIR")"
+  expected_noblog="$(bh_marker_noblog)"
   case "$handover_out" in
-    "blog-handover: ok (carried "*)
+    "$expected_ok")
       ;;
-    "blog-handover: no-blog ("*)
+    "$expected_noblog")
       echo "  ⚠ the live web root has no blog/ to carry over" >&2
       ;;
     *)

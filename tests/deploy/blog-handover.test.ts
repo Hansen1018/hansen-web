@@ -384,7 +384,10 @@ describe('the remote path is quoted and the hand-over is confirmed', () => {
     // empty or truncated, the remote shell runs an empty script, exits 0 and
     // prints nothing, and the swap that follows would drop blog/ with a
     // green deploy.
-    expect(src).toContain('blog-handover: ok')
+    // The expected confirmation is derived from the module's own marker
+    // function, so the wording lives in one place and the two cannot drift.
+    expect(src).toContain('bh_marker_ok')
+    expect(src).toContain('bh_marker_noblog')
     expect(src).toContain('refusing to swap')
   })
 
@@ -409,5 +412,90 @@ describe('the remote path is quoted and the hand-over is confirmed', () => {
       encoding: 'utf8',
     })
     expect(out.trim()).toBe("count=1 arg=/var/www/han sen'web")
+  })
+})
+
+describe('the remote hand-over writes exactly one line to stdout', () => {
+  // The caller captures stdout and compares it with the expected
+  // confirmation. Any other line on stdout - a folded path printed by a
+  // helper, for instance - lands in front of the confirmation and breaks
+  // the comparison, so every remote deploy would refuse to swap.
+  function remoteHandover(live: string, staging: string) {
+    const script =
+      readFileSync(modulePath, 'utf8') +
+      '\nstage_blog_into_staging "$1" "$2" || exit 1\n'
+    const res = spawnSync('sh', ['-s', '--', live, staging], {
+      input: script,
+      encoding: 'utf8',
+    })
+    return { status: res.status ?? 1, stdout: res.stdout ?? '', stderr: res.stderr ?? '' }
+  }
+
+  it('writes nothing but the confirmation line', () => {
+    const dir = scratch()
+    const live = join(dir, 'live')
+    const staging = join(dir, 'staging')
+    writeFile(join(live, 'blog', 'feed.json'), 'live')
+    mkdirSync(staging, { recursive: true })
+
+    const res = remoteHandover(live, staging)
+    expect(res.status).toBe(0)
+    expect(res.stdout).toBe('blog-handover: ok (carried ' + join(live, 'blog') + ')\n')
+  })
+
+  it('writes nothing but the no-blog line when the live root has no blog', () => {
+    const dir = scratch()
+    const live = join(dir, 'live')
+    const staging = join(dir, 'staging')
+    mkdirSync(live, { recursive: true })
+    mkdirSync(staging, { recursive: true })
+
+    const res = remoteHandover(live, staging)
+    expect(res.status).toBe(0)
+    expect(res.stdout).toBe('blog-handover: no-blog (no blog/ in the live web root)\n')
+  })
+
+  it('matches the confirmation deploy.sh compares against', () => {
+    // deploy.sh derives the expected confirmation from the module's own
+    // marker function, so the wording cannot drift between the two.
+    const dir = scratch()
+    const live = join(dir, 'live')
+    const staging = join(dir, 'staging')
+    writeFile(join(live, 'blog', 'feed.json'), 'live')
+    mkdirSync(staging, { recursive: true })
+
+    const expected = execFileSync(
+      'sh',
+      ['-c', '. "$1"; bh_marker_ok "$2"', 'marker-test', modulePath, live],
+      { encoding: 'utf8' },
+    )
+    expect(remoteHandover(live, staging).stdout).toBe(expected)
+  })
+})
+
+describe('the module refuses the paths that would delete the wrong tree', () => {
+  it('refuses a staging root that reaches the live root through a symlink', () => {
+    // The copy writes into the staging root and the cleanup deletes from
+    // it, so a staging root that IS the live root, through a link, deletes
+    // the live blog/ while copying it.
+    const dir = scratch()
+    const live = join(dir, 'live')
+    const staging = join(dir, 'staging')
+    writeFile(join(live, 'blog', 'feed.json'), 'live')
+    mkdirSync(live, { recursive: true })
+    symlinkSync(live, staging)
+
+    const res = handOver(live, staging)
+    expect(res.status).not.toBe(0)
+    expect(res.stderr).toContain('same directory')
+  })
+
+  it('refuses a path with a newline in it', () => {
+    // The confirmation is one line, and a path with a newline in it spans
+    // two, so the caller would never see the confirmation it expects.
+    const dir = scratch()
+    const res = handOver(join(dir, 'live') + '\n/blog', join(dir, 'staging'))
+    expect(res.status).not.toBe(0)
+    expect(res.stderr).toContain('newline')
   })
 })
