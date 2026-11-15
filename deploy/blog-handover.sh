@@ -256,10 +256,13 @@ require_no_parent_refs() {
   return 0
 }
 
-# bh_fold_agrees_with_kernel PATH
+# bh_fold_agrees_with_kernel PATH LABEL
 #
 # True when the FOLDED path names the same directory the kernel would
 # resolve PATH to.
+#
+# LABEL names PATH in the refusal message, so the operator is told which
+# of the two roots was refused.
 #
 # The fold resolves ".." lexically, without following symlinks, while the
 # kernel resolves it physically, after following them. For a path like

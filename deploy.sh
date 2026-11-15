@@ -227,9 +227,9 @@ if [[ "$DEPLOY_MODE" == "remote" ]]; then
   if [ "$handover_out" = "$expected_ok" ]; then
     :
   elif [ "$handover_out" = "$expected_noblog" ]; then
-    echo "  ⚠ the live web root $REMOTE_DIR$ has no blog/ to carry over" >&2
+    echo "  ⚠ the live web root $REMOTE_DIR has no blog/ to carry over" >&2
   elif [ "$handover_out" = "$expected_noroot" ]; then
-    echo "  ⚠ the live web root $REMOTE_DIR$ does not exist on $HOST$; nothing to carry over" >&2
+    echo "  ⚠ the live web root $REMOTE_DIR does not exist on $HOST; nothing to carry over" >&2
   else
     echo "✗ the blog hand-over did not report success on $HOST$ (ssh exit $handover_status); refusing to swap" >&2
     exit 1

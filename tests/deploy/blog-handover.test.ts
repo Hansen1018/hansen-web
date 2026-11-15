@@ -37,6 +37,30 @@ function writeFile(path: string, content: string): void {
 }
 
 describe('the blog hand-over', () => {
+  it('prints exactly the marker deploy.sh expects', () => {
+    // deploy.sh compares the hand-over's stdout against a marker it
+    // builds locally, with an exact string comparison. If the module's
+    // output and that marker drift apart, the deploy refuses - so the
+    // two are pinned together here, by running the real hand-over and
+    // comparing its stdout with the marker the module produces for the
+    // same root.
+    const live = scratch()
+    const staging = scratch()
+    mkdirSync(join(live, 'blog'), { recursive: true })
+    writeFileSync(join(live, 'blog', 'post.md'), 'post')
+    const out = execFileSync(
+      'sh',
+      ['-c', '. "$1"; stage_blog_into_staging "$2" "$3"', 'marker-test', modulePath, live, staging],
+      { encoding: 'utf8' },
+    )
+    const expected = execFileSync(
+      'sh',
+      ['-c', '. "$1"; bh_marker_ok "$2"', 'marker-test', modulePath, live],
+      { encoding: 'utf8' },
+    )
+    expect(out.trim()).toBe(expected.trim())
+  })
+
   it('carries the live blog into the staging directory, byte for byte', () => {
     const dir = scratch()
     const live = join(dir, 'live')
