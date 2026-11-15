@@ -24,10 +24,32 @@ if [[ ! -f "$CSP_ASSERT_SH" ]]; then
 fi
 . "$CSP_ASSERT_SH"
 
+# The blog hand-over lives in deploy/blog-handover.sh for the same reason:
+# the local branch runs it directly and the remote branch ships that same
+# file to the host over stdin, so the two paths cannot drift apart.
+BLOG_HANDOVER_SH="$CSP_ASSERT_DIR/deploy/blog-handover.sh"
+if [[ ! -f "$BLOG_HANDOVER_SH" ]]; then
+  echo "missing $BLOG_HANDOVER_SH (deploy.sh needs a full repo checkout)" >&2
+  exit 1
+fi
+. "$BLOG_HANDOVER_SH"
+
 REMOTE_DIR="${REMOTE_DIR:-/var/www/hansen-web}"
 LOCAL_OUT="${LOCAL_OUT:-out}"
 PUBLIC_URL="${PUBLIC_URL:-https://hansendong.top}"
 LOCAL_PORT="${LOCAL_PORT:-8081}"
+
+# remote_quote PATH
+#
+# Print PATH quoted for the remote shell, so a path containing a space
+# survives the word splitting the remote shell performs on the command
+# string. REMOTE_DIR is overridable through the environment, so this is not
+# hypothetical: measured, an unquoted REMOTE_DIR containing a space made
+# the remote command fail with "too many arguments", and the blog hand-over
+# was then skipped without an error.
+remote_quote() {
+  printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\''/g")"
+}
 
 # Deploy mode selection
 if [[ -n "${1:-}" ]]; then
@@ -45,13 +67,25 @@ npm run build
 # 2. Atomic deploy (prevents serving half-written files)
 if [[ "$DEPLOY_MODE" == "remote" ]]; then
   echo "→ Uploading to $HOST (atomic via tmp dir)..."
-  ssh "$HOST" "mkdir -p $REMOTE_DIR.tmp"
+  # Every path that reaches the remote shell is quoted for it. REMOTE_DIR is
+  # overridable through the environment, so an unquoted path is not
+  # hypothetical: measured, a REMOTE_DIR containing a space made the remote
+  # command fail with "too many arguments", and the blog hand-over was then
+  # skipped without an error. rsync is not the problem here: measured, rsync
+  # escapes a space in the remote path itself ('/var/www/han\\ sen web.tmp/').
+  # The remote shell word-splitting the ssh command string is.
+  REMOTE_DIR_Q="$(remote_quote "$REMOTE_DIR")"
+  REMOTE_DIR_TMP_Q="$(remote_quote "$REMOTE_DIR.tmp")"
+  ssh "$HOST" "mkdir -p ${REMOTE_DIR_TMP_Q}"
   rsync -a --delete "$LOCAL_OUT/" "$HOST:$REMOTE_DIR.tmp/"
   # The Hugo blog repo deploys blog/feed.json into this same web root
   # (its deploy.sh sets WEB_DIR=/var/www/hansen-web). Carry it into the
   # staging dir so the atomic swap below does not drop it.
-  ssh "$HOST" "if [ -d $REMOTE_DIR/blog ]; then cp -a $REMOTE_DIR/blog $REMOTE_DIR.tmp/; fi"
-  ssh "$HOST" "rm -rf $REMOTE_DIR && mv $REMOTE_DIR.tmp $REMOTE_DIR"
+  #
+  # The hand-over runs on the host, from the same file the local branch
+  # sources, so the two paths cannot drift apart.
+  ssh "$HOST" "BLOG_HANDOVER_RUN=1 sh -s -- ${REMOTE_DIR_Q} ${REMOTE_DIR_TMP_Q}" < "$BLOG_HANDOVER_SH"
+  ssh "$HOST" "rm -rf ${REMOTE_DIR_Q} && mv ${REMOTE_DIR_TMP_Q} ${REMOTE_DIR_Q}"
 else
   echo "→ Deploying locally to $REMOTE_DIR (atomic via tmp dir)..."
   mkdir -p "$REMOTE_DIR.tmp"
@@ -59,9 +93,7 @@ else
   # The Hugo blog repo deploys blog/feed.json into this same web root
   # (its deploy.sh sets WEB_DIR=/var/www/hansen-web). Carry it into the
   # staging dir so the atomic swap below does not drop it.
-  if [ -d "$REMOTE_DIR/blog" ]; then
-    cp -a "$REMOTE_DIR/blog" "$REMOTE_DIR.tmp/"
-  fi
+  stage_blog_into_staging "$REMOTE_DIR" "$REMOTE_DIR.tmp"
   rm -rf "$REMOTE_DIR"
   mv "$REMOTE_DIR.tmp" "$REMOTE_DIR"
 fi
@@ -84,10 +116,11 @@ fi
 #
 # We verify BOTH presence AND expected value to prevent a misconfigured host
 # from returning success while serving a permissive policy (e.g. an
-# X-Frame-Options: ALLOWALL regression). CSP is checked for two critical
-# directives (frame-ancestors 'none' + default-src 'self') rather than an
-# exact string match, since the policy string is long and directive order
-# may vary across hosts.
+# X-Frame-Options: ALLOWALL regression). CSP is not compared as one exact
+# string -- the policy string is long and directive order may vary across
+# hosts -- but against the individual critical rules in
+# deploy/csp-assert.sh: frame-ancestors 'none', default-src 'self', and the
+# CDN origins the deployed trees actually load.
 echo "→ Verifying security headers on $PUBLIC_URL..."
 # curl -fsSLI follows redirects, so the response can contain multiple
 # HTTP/ blocks (one per redirect hop). The awk script tracks the LAST
@@ -159,18 +192,14 @@ else
       missing_headers+=("$header")
     elif [[ "$(printf %s "$header" | tr "[:upper:]" "[:lower:]")" == "content-security-policy" ]]; then
       weak=0
-      # Both critical directives must appear as standalone directives
-      # (not as prefixed junk like "not-frame-ancestors ..." which browsers
-      # ignore) and must END at their canonical value:
-      #   - frame-ancestors 'none'  → followed by ; or end-of-string
-      #     (rejects `frame-ancestors 'none' https://evil.example`)
-      #   - default-src 'self'     → followed by ; or end-of-string
-      #     (rejects `default-src 'self' https://evil.example`)
-      # The boundary-anchored ERE catches both prefixed-junk and
-      # extra-source regressions. Loop unrolled into explicit checks so
-      # the diagnostic message names WHICH directive(s) actually failed
-      # (the previous for-loop broke on first failure but the message
-      # listed both, making policy troubleshooting harder).
+      # Every critical rule is anchored on a CSP token boundary, so a
+      # directive must appear as a standalone directive (not as prefixed
+      # junk like "not-frame-ancestors ...", which browsers ignore), a
+      # canonical value must END at its boundary, and a whitelisted origin
+      # must match as a whole host rather than a lookalike prefix. The
+      # rules themselves live in deploy/csp-assert.sh; the diagnostic
+      # message names WHICH rule(s) actually failed, so policy
+      # troubleshooting does not have to re-run the check by hand.
       # --- CSP critical-directive verification (begin) ---
       # The rules live in deploy/csp-assert.sh, shared with
       # tests/deploy/csp-assert.test.ts, so the verifier and its test
@@ -204,8 +233,9 @@ else
     echo "    These must be configured at the static host (nginx/Caddy)."
     echo "    See deploy/nginx-security-headers.conf for the recommended snippet."
   else
-    # Success line intentionally reflects partial CSP coverage (only the two
-    # critical directives are checked), to avoid overstating verification.
+    # The success line reports the critical rules that were checked (the
+    # rule set in deploy/csp-assert.sh), not the whole policy, so it does
+    # not overstate what was verified.
     echo "  ✓ all ${#EXPECTED[@]} security headers present (CSP verified for critical directives)"
   fi
 fi

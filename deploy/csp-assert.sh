@@ -66,16 +66,33 @@
 # as is the space-separated multi-source form
 # `connect-src https://cdn.jsdelivr.net https://cdnjs.cloudflare.com;`.
 #
-# The host is escaped for the pattern, so the caller passes a plain origin.
+# csp_escape_ere TEXT
+#
+# Escape TEXT so that the ERE in csp_has_origin matches it literally.
+#
+# Both halves of the pattern are escaped, and escaping only '.' was not
+# enough:
+#   - an unescaped '+' in an origin made 'a+b' match 'aab', so a policy
+#     naming a different host satisfied a rule it did not satisfy;
+#   - an unescaped '.' in a directive made 'connect.src' match
+#     'connect-src', so a rule for one directive was satisfied by another.
+#
+# The character class is the set of ERE metacharacters: . [ ] \ ^ $ * + ?
+# ( ) { } |. Everything else is literal and is left alone.
+csp_escape_ere() {
+  printf '%s' "$1" | sed 's/[][\\.^$*+?(){}|]/\\&/g'
+}
+
 csp_has_origin() {
   local policy="${1-}"
   local directive="${2-}"
   local origin="${3-}"
-  local escaped
+  local escaped_directive escaped_origin
 
-  escaped="$(printf '%s' "$origin" | sed 's/\./\\./g')"
+  escaped_directive="$(csp_escape_ere "$directive")"
+  escaped_origin="$(csp_escape_ere "$origin")"
   printf '%s' "$policy" \
-    | grep -qiE "(^|[[:space:];])${directive}[[:space:]]+[^;]*${escaped}([[:space:];/]|$)"
+    | grep -qiE "(^|[[:space:];])${escaped_directive}[[:space:]]+[^;]*${escaped_origin}([[:space:];/]|$)"
 }
 
 # csp_missing_directives <policy>
