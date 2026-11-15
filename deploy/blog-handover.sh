@@ -74,13 +74,20 @@ bh_trim_path() (
 
 # bh_fold_path PATH
 #
-# Print PATH with its "." components dropped and its ".." components
+# Print PATH folded: its "." components dropped and its ".." components
 # resolved against the components before them, the way the kernel resolves
-# them. A relative path that climbs above the directory it was given
-# relative to prints "..", so the caller can see it.
+# them.
 #
-# bh_fp_escape is set to 1 when the path climbed above its base.
-bh_fold_path() {
+# The body is a subshell, so its working variables never reach the shell
+# that sources this file, and the folded path is the ONLY thing it prints.
+# The helper used to leave five variables in the caller's shell and to
+# print its result as well, and every caller had to redirect the output and
+# then read a global: one contract, one value, nothing left behind.
+#
+# A relative path that climbs above the directory it was given relative to
+# prints "..", so the caller can see it. A path that resolves to the
+# current directory prints ".".
+bh_fold_path() (
   bh_fp_in="$1"
   bh_fp_out=""
   bh_fp_depth=0
@@ -103,7 +110,10 @@ bh_fold_path() {
             */*) bh_fp_out="${bh_fp_out%/*}" ;;
             *) bh_fp_out="" ;;
           esac
-        else
+        elif [ "$bh_fp_absolute" -eq 0 ]; then
+          # A relative path that climbs above its base cannot be resolved
+          # any further: the kernel refuses it, and "rm -rf" on it would
+          # delete a parent the operator never named.
           bh_fp_escape=1
         fi
         ;;
@@ -114,28 +124,28 @@ bh_fold_path() {
     esac
   done
   if [ "$bh_fp_escape" -eq 1 ]; then
-    bh_fp_out=".."
-    return 0
+    printf '%s\n' ".."
+    # The body is a subshell, and "return" inside one is not portable
+    # (dash: "can only return from a function or sourced script"), so the
+    # subshell is left with the status the caller expects.
+    exit 0
   fi
   if [ "$bh_fp_absolute" -eq 1 ]; then
-    bh_fp_out="/${bh_fp_out#/}"
+    # ".." at the root stays at the root, the way the kernel resolves it.
+    printf '%s\n' "/${bh_fp_out#/}"
   else
     bh_fp_out="${bh_fp_out#/}"
     [ -n "$bh_fp_out" ] || bh_fp_out="."
+    printf '%s\n' "$bh_fp_out"
   fi
-  printf '%s\n' "$bh_fp_out"
-}
+)
 
 # bh_folded_path PATH
 #
-# Print PATH folded, the way the kernel resolves it: its "." components
-# dropped and its ".." components resolved against the components before
-# them. This is the printable form of what bh_fold_path computes.
+# Print PATH folded. An alias for bh_fold_path, kept because the hand-over
+# reads better with the two names.
 bh_folded_path() {
-  # bh_fold_path prints nothing here: its output would land in the middle
-  # of the hand-over's stdout.
-  bh_fold_path "$1" >/dev/null
-  printf '%s\n' "$bh_fp_out"
+  bh_fold_path "$1"
 }
 
 # bh_path_is_safe PATH LABEL
@@ -151,16 +161,19 @@ bh_folded_path() {
 #     "a/..") or climbs above it ("..", "../x"): "rm -rf .." deletes a
 #     parent the operator never named;
 #   - an absolute path with a ".." component ("/var/www/site/../etc"),
-#     which resolves to a different directory than it appears to name.
+#     which resolves to a different directory than it appears to name;
+#   - a path that starts with "-", which "rm -rf" would read as an option.
 #
 # A relative path that stays INSIDE the current directory is allowed:
 # "./site", "out/../site" and "site/" all name a directory the operator
 # asked for, and a local deploy never leaves this host.
-bh_path_is_safe() {
+#
+# The body is a subshell, so the folded path it computes stays here.
+bh_path_is_safe() (
   case "$1" in
     "")
       echo "✗ $2 must not be empty" >&2
-      return 1
+      exit 1
       ;;
   esac
   # A newline in the path would break the confirmation protocol: the marker
@@ -170,42 +183,48 @@ bh_path_is_safe() {
   case "$1" in
     *"$bh_nl"*)
       echo "✗ $2 must not contain a newline (got: $1)" >&2
-      return 1
+      exit 1
       ;;
   esac
-  # The folded path is taken from bh_fp_out, and NOTHING is printed here:
-  # this function runs inside the hand-over, and a line on stdout would
-  # land in front of the confirmation the caller checks.
-  bh_fold_path "$1" >/dev/null
+
+  bh_folded="$(bh_fold_path "$1")"
+
   # The check is on the FOLDED path, so "./-rf" is judged as "-rf": it
   # reaches "rm -rf" as an OPTION, not as a path.
-  case "$bh_fp_out" in
+  case "$bh_folded" in
     -*)
       echo "✗ $2 must not start with '-' (got: $1)" >&2
-      return 1
+      exit 1
       ;;
   esac
-  if [ "$bh_fp_escape" -eq 1 ]; then
-    echo "✗ $2 must not climb above the current directory (got: $1)" >&2
-    return 1
-  fi
-  if [ "$bh_fp_absolute" -eq 1 ]; then
-    if [ "$bh_fp_out" = "/" ]; then
+
+  case "$bh_folded" in
+    "..")
+      echo "✗ $2 must not climb above the current directory (got: $1)" >&2
+      exit 1
+      ;;
+    ".")
+      echo "✗ $2 must not be the current directory (got: $1)" >&2
+      exit 1
+      ;;
+    "/")
       echo "✗ $2 must not be the root directory (got: $1)" >&2
-      return 1
-    fi
-    case "/$1/" in
-      */../*)
-        echo "✗ $2 must not contain a '..' component (got: $1)" >&2
-        return 1
-        ;;
-    esac
-  elif [ "$bh_fp_out" = "." ]; then
-    echo "✗ $2 must not be the current directory (got: $1)" >&2
-    return 1
-  fi
-  return 0
-}
+      exit 1
+      ;;
+  esac
+
+  case "$1" in
+    /*)
+      case "/$1/" in
+        */../*)
+          echo "✗ $2 must not contain a '..' component (got: $1)" >&2
+          exit 1
+          ;;
+      esac
+      ;;
+  esac
+  exit 0
+)
 
 # require_no_parent_refs PATH LABEL
 #
@@ -292,6 +311,10 @@ stage_blog_into_staging() {
   bh_staging_folded="$(bh_folded_path "$bh_staging_root")"
   bh_live_real="$(bh_canonical_path "$bh_live_folded")"
   bh_staging_real="$(bh_canonical_path "$bh_staging_folded")"
+  # The copy, the inspection and the cleanup work on the FOLDED roots: the
+  # checks judged those, so those are what is operated on.
+  bh_live_dir="$bh_live_folded"
+  bh_staging_dir="$bh_staging_folded"
 
   if [ "$bh_live_real" = "$bh_staging_real" ]; then
     echo "error: the staging root and the live web root are the same directory ($bh_live_real)" >&2
@@ -310,24 +333,24 @@ stage_blog_into_staging() {
       ;;
   esac
 
-  if [ ! -d "$bh_staging_root" ]; then
-    echo "error: the staging root $bh_staging_root does not exist or is not a directory" >&2
+  if [ ! -d "$bh_staging_dir" ]; then
+    echo "error: the staging root $bh_staging_dir does not exist or is not a directory" >&2
     return 1
   fi
 
-  if [ ! -d "$bh_live_root/blog" ]; then
+  if [ ! -d "$bh_live_dir/blog" ]; then
     # A blog that exists but is not a directory cannot be carried over, and
     # treating it as "no blog here" would drop it at the swap, which is the
     # 404 this script exists to prevent.
-    if [ -L "$bh_live_root/blog" ]; then
+    if [ -L "$bh_live_dir/blog" ]; then
       # A link that does not resolve to a directory is not the same thing
       # as a plain file, and saying so tells the operator which one it is.
-      echo "error: $bh_live_root/blog is a symlink that does not resolve to a directory;" >&2
+      echo "error: $bh_live_dir/blog is a symlink that does not resolve to a directory;" >&2
       echo "       nothing was carried over" >&2
       return 1
     fi
-    if [ -e "$bh_live_root/blog" ]; then
-      echo "error: $bh_live_root/blog exists but is not a directory; nothing was carried over" >&2
+    if [ -e "$bh_live_dir/blog" ]; then
+      echo "error: $bh_live_dir/blog exists but is not a directory; nothing was carried over" >&2
       return 1
     fi
     bh_marker_noblog
@@ -342,10 +365,16 @@ stage_blog_into_staging() {
   # that fails the whole pipeline and aborts the deploy before the message
   # below is printed. "sed -n 1p" reads the whole stream, so "find"
   # finishes normally, and find's own error stays visible.
-  bh_special="$(find "$bh_live_root/blog" ! -type f ! -type d ! -type l -print | sed -n '1p')" || {
-    echo "error: could not inspect $bh_live_root/blog for non-regular files" >&2
+  # find runs on its own, so the status checked here is find's and not the
+  # status of the last command in a pipeline: a tree it cannot read is
+  # refused instead of being reported as inspected. Its stderr is left
+  # visible.
+  bh_special_all="$(find "$bh_live_dir/blog" ! -type f ! -type d ! -type l -print)" || {
+    echo "error: could not inspect $bh_live_dir/blog for non-regular files" >&2
     return 1
   }
+  bh_special="$(printf '%s
+' "$bh_special_all" | sed -n '1p')"
   if [ -n "$bh_special" ]; then
     echo "error: $bh_special is not a regular file, directory or symlink; the hand-over copies only those" >&2
     return 1
@@ -354,8 +383,8 @@ stage_blog_into_staging() {
   # -e misses a dangling symlink, and a link in the staging tree would make
   # the copy below write THROUGH it, outside the web root. -L covers every
   # entry that exists as a link, broken or not.
-  if [ -e "$bh_staging_root/blog" ] || [ -L "$bh_staging_root/blog" ]; then
-    echo "error: $bh_staging_root/blog and $bh_live_root/blog both exist." >&2
+  if [ -e "$bh_staging_dir/blog" ] || [ -L "$bh_staging_dir/blog" ]; then
+    echo "error: $bh_staging_dir/blog and $bh_live_dir/blog both exist." >&2
     echo "       The live web root and this build disagree about who owns blog/." >&2
     echo "       Merging them, or letting one silently overwrite the other, would" >&2
     echo "       publish a tree nobody wrote. Resolve it and deploy again." >&2
@@ -366,16 +395,16 @@ stage_blog_into_staging() {
   # The underlying error is kept and printed: "permission denied" and "no
   # space left on device" are what the operator needs, and swallowing them
   # leaves only a generic message to work with.
-  bh_mkdir_err="$(mkdir -p "$bh_staging_root/blog" 2>&1)" || {
-    echo "error: could not create $bh_staging_root/blog" >&2
+  bh_mkdir_err="$(mkdir -p "$bh_staging_dir/blog" 2>&1)" || {
+    echo "error: could not create $bh_staging_dir/blog" >&2
     if [ -n "$bh_mkdir_err" ]; then
       echo "       $bh_mkdir_err" >&2
     fi
     return 1
   }
 
-  bh_cp_err="$(cp -Rp "$bh_live_root/blog/." "$bh_staging_root/blog/" 2>&1)" || {
-    echo "error: could not copy $bh_live_root/blog into $bh_staging_root/blog" >&2
+  bh_cp_err="$(cp -Rp "$bh_live_dir/blog/." "$bh_staging_dir/blog/" 2>&1)" || {
+    echo "error: could not copy $bh_live_dir/blog into $bh_staging_dir/blog" >&2
     if [ -n "$bh_cp_err" ]; then
       echo "       $bh_cp_err" >&2
     fi
@@ -383,8 +412,8 @@ stage_blog_into_staging() {
     # the "both exist" refusal above on this run's leftovers and blame the
     # live web root for them. If the cleanup itself fails, say so, because
     # the next run WILL hit that refusal and the operator has to know why.
-    if ! rm -rf "$bh_staging_root/blog"; then
-      echo "warning: could not remove the partial $bh_staging_root/blog;" >&2
+    if ! rm -rf "$bh_staging_dir/blog"; then
+      echo "warning: could not remove the partial $bh_staging_dir/blog;" >&2
       echo "         remove it before the next deploy" >&2
     fi
     return 1

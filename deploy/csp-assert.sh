@@ -188,9 +188,22 @@ csp_missing_directives() {
     # are the same set.
     case "$kind" in
       '')
+        # A blank line is not a rule, and csp_rule_count does not count it
+        # either.
+        continue
+        ;;
+      '#'*)
+        # A comment in the rule list is not a rule either.
         continue
         ;;
       canonical|origin)
+        # A rule with a missing field is not a rule: it would be counted
+        # here and enforce nothing.
+        if [ -z "$directive" ] || [ -z "$value" ]; then
+          echo "malformed rule: $kind|$directive|$value" >&2
+          status=1
+          continue
+        fi
         rule_count=$((rule_count + 1))
         ;;
       *)
@@ -244,5 +257,5 @@ csp_rule_count() {
   # the enforcement loop skips. "grep -c" exits 1 when it counts nothing,
   # so the exit status is ignored: the number is a display, and an empty
   # rule list is caught where it matters, in csp_missing_directives.
-  csp_rules | grep -c '^[^|]' || true
+  csp_rules | grep -c -E '^(canonical|origin)[|][^|]+[|][^|]+$' || true
 }

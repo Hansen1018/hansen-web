@@ -87,6 +87,12 @@ fi
 # than quoted into the wrong place.
 if [[ "$DEPLOY_MODE" == "remote" ]]; then
   case "$HOST" in
+    -*)
+      # The host is the first positional to ssh and rsync, so a value that
+      # starts with "-" would be read as an OPTION ("-oProxyCommand=...").
+      echo "✗ the host must not start with '-' (got: $HOST)" >&2
+      exit 1
+      ;;
     *[[:space:]]*)
       echo "✗ the host must not contain whitespace (got: $HOST)" >&2
       exit 1
@@ -143,9 +149,6 @@ if [[ "$DEPLOY_MODE" == "remote" ]]; then
   # truncated: the remote shell would run an empty script, exit 0 and
   # print nothing, and the swap below would drop blog/ with a green
   # deploy. So the remote side prints a confirmation and it is checked.
-  #
-  # stdout and stderr are captured together, so a refusal on the host is
-  # shown to the operator here instead of being lost.
   handover_module="$(cat "$BLOG_HANDOVER_SH")" || {
     echo "✗ could not read $BLOG_HANDOVER_SH" >&2
     exit 1
