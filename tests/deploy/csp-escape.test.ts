@@ -194,6 +194,19 @@ describe('the origin may be the first source in the directive value', () => {
     ).toBe(false)
   })
 
+  it('rejects the exact policy from the disputed review comment', () => {
+    // The comment named this exact string and predicted a false positive.
+    // Measured, it does not match, and it is pinned here so the claim cannot
+    // come back without a test failing.
+    expect(
+      hasOrigin(
+        'connect-src https://example.org/?u=https://cdn.jsdelivr.net',
+        'connect-src',
+        'https://cdn.jsdelivr.net',
+      ),
+    ).toBe(false)
+  })
+
   it('matches the directive and the origin case-insensitively', () => {
     // CSP directive names and host names are case-insensitive, so
     // CONNECT-SRC has to satisfy the connect-src rule. Kept deliberately:
@@ -205,24 +218,64 @@ describe('the origin may be the first source in the directive value', () => {
   })
 })
 
-describe('the rule count the operator sees matches the rules that run', () => {
-  it('counts the same number of rules the module enforces', () => {
-    // The success line in deploy.sh prints a number. If that number and the
-    // rules the module enforces drift apart, the operator is told something
-    // that is not true, so the count is checked against the module itself.
-    const src = readFileSync(modulePath, 'utf8')
-    const start = src.indexOf('csp_missing_directives() {')
-    if (start === -1) {
-      throw new Error('csp_missing_directives not found in deploy/csp-assert.sh')
-    }
-    const end = src.indexOf('\n}\n', start)
-    if (end === -1) {
-      throw new Error('end of csp_missing_directives not found in deploy/csp-assert.sh')
-    }
-    const body = src.slice(start, end)
-    const rules = (body.match(/if ! /g) ?? []).length
+describe('an empty directive or origin is rejected', () => {
+  // This is a security assertion, so it fails closed: an empty value would
+  // otherwise match a pattern that matches almost anything.
+  it('rejects an empty directive', () => {
+    expect(
+      hasOrigin('connect-src https://cdn.jsdelivr.net;', '', 'https://cdn.jsdelivr.net'),
+    ).toBe(false)
+  })
+
+  it('rejects an empty origin', () => {
+    expect(
+      hasOrigin('connect-src https://cdn.jsdelivr.net;', 'connect-src', ''),
+    ).toBe(false)
+  })
+})
+
+describe('the rule count is derived from the rules that run', () => {
+  function ruleCount(moduleFile: string = modulePath): number {
     const script = 'source "$1"; csp_rule_count'
-    const out = execFileSync('bash', ['-c', script, 'count-test', modulePath], { encoding: 'utf8' })
-    expect(Number(out.trim())).toBe(rules)
+    const out = execFileSync('bash', ['-c', script, 'count-test', moduleFile], {
+      encoding: 'utf8',
+    })
+    return Number(out.trim())
+  }
+
+  it('counts the rules the module enforces', () => {
+    expect(ruleCount()).toBe(7)
+  })
+
+  it('drops the count when a rule is removed', () => {
+    // A hard-coded number would not notice a rule disappearing, which is
+    // exactly the drift the derived count exists to prevent.
+    const src = readFileSync(modulePath, 'utf8')
+    const marker =
+      '  if ! csp_has_origin "$policy" style-src https://cdn.jsdelivr.net; then'
+    const start = src.indexOf(marker)
+    if (start === -1) {
+      throw new Error('style-src rule not found in deploy/csp-assert.sh')
+    }
+    const end = src.indexOf('  fi', start) + '  fi'.length
+    const dir = mkdtempSync(join(tmpdir(), 'csp-count-mutant-'))
+    const file = join(dir, 'csp-assert.sh')
+    writeFileSync(file, src.slice(0, start) + src.slice(end))
+
+    expect(ruleCount(file)).toBe(6)
+  })
+})
+describe('a malformed policy cannot satisfy a later directive rule', () => {
+  it('does not accept a directive name that is really a source expression', () => {
+    // Without a ";" the whole tail is the first directive's source list, so
+    // a browser never sees a script-src directive here. The check has to
+    // fail closed on that input rather than treat the tail as one.
+    expect(
+      hasOrigin(
+        'img-src data: script-src https://cdn.jsdelivr.net',
+        'script-src',
+        'https://cdn.jsdelivr.net',
+      ),
+    ).toBe(false)
   })
 })

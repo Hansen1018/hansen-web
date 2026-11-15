@@ -118,8 +118,12 @@ describe('deploy.sh wires the shared hand-over into both branches', () => {
   })
 
   it('runs the same file in the remote branch, over stdin', () => {
-    expect(src).toContain('BLOG_HANDOVER_RUN=1 sh -s --')
-    expect(src).toContain('< "$BLOG_HANDOVER_SH"')
+    // The module defines the function and nothing else; the caller appends
+    // the call. Sourcing it can therefore never take over the shell of
+    // whoever sourced it.
+    expect(src).toContain('sh -s --')
+    expect(src).toContain('cat "$BLOG_HANDOVER_SH"')
+    expect(src).toContain('stage_blog_into_staging "$1" "$2" || exit 1')
   })
 
   it('no longer copies the blog with cp -a, which nests it', () => {
@@ -173,14 +177,14 @@ describe('the remote entry point turns a refusal into an exit status', () => {
     writeFile(join(live, 'blog', 'feed.json'), 'live')
     writeFile(join(staging, 'blog', 'page.html'), 'export')
 
+    // Exactly what deploy.sh sends to the host: the module, then the call.
+    const script =
+      readFileSync(modulePath, 'utf8') +
+      '\nstage_blog_into_staging "$1" "$2" || exit 1\n'
     const result = spawnSync(
       'sh',
       ['-s', '--', live, staging],
-      {
-        input: readFileSync(modulePath, 'utf8'),
-        encoding: 'utf8',
-        env: { ...process.env, BLOG_HANDOVER_RUN: '1' },
-      },
+      { input: script, encoding: 'utf8' },
     )
     expect(result.status).not.toBe(0)
     expect(result.stderr).toContain('both exist')
@@ -219,10 +223,45 @@ describe('the hand-over refuses a tree it cannot carry over', () => {
   })
 })
 
-describe('deploy.sh validates REMOTE_DIR before it deletes anything', () => {
+describe('the module refuses the paths that would be dangerous on its own', () => {
+  it('refuses to create the staging root', () => {
+    // Creating it here would let a typo produce a staging tree holding
+    // nothing but blog/, and the swap would then replace the whole site
+    // with it.
+    const dir = scratch()
+    const live = join(dir, 'live')
+    writeFile(join(live, 'blog', 'feed.json'), 'live')
+    const staging = join(dir, 'missing-staging')
+
+    const res = handOver(live, staging)
+    expect(res.status).not.toBe(0)
+    expect(res.stderr).toContain('staging root')
+    expect(existsSync(staging)).toBe(false)
+  })
+
+  it('refuses the root directory as the live web root', () => {
+    const res = handOver('/', '/tmp')
+    expect(res.status).not.toBe(0)
+    expect(res.stderr).toContain('refusing to use /')
+  })
+
+  it('refuses a .. component in the staging root', () => {
+    const dir = scratch()
+    const live = join(dir, 'live')
+    writeFile(join(live, 'blog', 'feed.json'), 'live')
+
+    // path.join normalizes '..' away, so the path is built literally:
+    // otherwise the module never sees a '..' component at all.
+    const res = handOver(live, dir + '/staging/..')
+    expect(res.status).not.toBe(0)
+    expect(res.stderr).toContain('..')
+  })
+})
+
+describe('deploy.sh normalizes REMOTE_DIR before it deletes anything', () => {
   // The validation lives in deploy.sh, so it is exercised the way deploy.sh
-  // runs it: the function is extracted and sourced, then called.
-  function validate(path: string): string {
+  // runs it: the functions are extracted and sourced, then called.
+  function normalize(path: string): string {
     const src = readFileSync(deployShPath, 'utf8')
     const begin = '--- remote path validation (begin) ---'
     const end = '--- remote path validation (end) ---'
@@ -231,23 +270,51 @@ describe('deploy.sh validates REMOTE_DIR before it deletes anything', () => {
     if (i === -1 || j === -1) {
       throw new Error('remote path validation markers not found in deploy.sh')
     }
-    const block = src.slice(src.indexOf('validate_remote_dir() {', i), j)
+    const block = src.slice(src.indexOf('normalize_remote_dir() {', i), j)
     const script =
       'exec 2>&1\n' + block +
-      '\nvalidate_remote_dir "$1" && echo "exit=0" || echo "exit=1"'
-    return execFileSync('bash', ['-c', script, 'validate-test', path], {
+      '\nnormalize_remote_dir "$1" && echo "exit=0" || echo "exit=1"'
+    return execFileSync('bash', ['-c', script, 'normalize-test', path], {
       encoding: 'utf8',
     })
   }
 
-  it('accepts an ordinary absolute path', () => {
-    expect(validate('/var/www/hansen-web')).toContain('exit=0')
+  function requireAbsolute(path: string): string {
+    const src = readFileSync(deployShPath, 'utf8')
+    const begin = '--- remote path validation (begin) ---'
+    const end = '--- remote path validation (end) ---'
+    const i = src.indexOf(begin)
+    const j = src.indexOf(end)
+    if (i === -1 || j === -1) {
+      throw new Error('remote path validation markers not found in deploy.sh')
+    }
+    const block = src.slice(src.indexOf('normalize_remote_dir() {', i), j)
+    const script =
+      'exec 2>&1\n' + block +
+      '\nrequire_absolute_path "$1" && echo "exit=0" || echo "exit=1"'
+    return execFileSync('bash', ['-c', script, 'absolute-test', path], {
+      encoding: 'utf8',
+    })
+  }
+
+  it('trims a trailing slash, so the staging path stays a sibling', () => {
+    // "/var/www/site/" would otherwise derive "/var/www/site/.tmp", a
+    // different directory and one inside the live web root.
+    const out = normalize('/var/www/hansen-web/')
+    expect(out).toContain('exit=0')
+    expect(out.trim().split('\n')[0]).toBe('/var/www/hansen-web')
   })
 
-  it('refuses a relative path, the root, and a .. component', () => {
-    expect(validate('hansen-web')).toContain('absolute path')
-    expect(validate('/')).toContain('root')
-    expect(validate('/var/www/../etc')).toContain('..')
+  it('refuses every spelling of the root', () => {
+    expect(normalize('/')).toContain('root')
+    expect(normalize('//')).toContain('root')
+    expect(normalize('/./')).toContain('root')
+  })
+
+  it('refuses a relative path in remote mode and a .. component', () => {
+    expect(requireAbsolute('out-dir')).toContain('absolute path')
+    expect(requireAbsolute('/var/www/hansen-web')).toContain('exit=0')
+    expect(normalize('/var/www/../etc')).toContain('..')
   })
 })
 
@@ -261,6 +328,13 @@ describe('the remote path is quoted and the hand-over is confirmed', () => {
     // green deploy.
     expect(src).toContain('blog-handover: ok')
     expect(src).toContain('refusing to swap')
+  })
+
+  it('checks the local hand-over before the swap too', () => {
+    // The local branch also deletes the live web root. Leaving the check to
+    // "set -e" would work today, but it stops working the moment the call
+    // is moved into an if/|| block.
+    expect(src).toContain('if ! stage_blog_into_staging "$REMOTE_DIR" "$REMOTE_DIR.tmp"')
   })
 
   it('quotes a path with a space and a quote into a single argument', () => {

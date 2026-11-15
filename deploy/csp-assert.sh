@@ -93,14 +93,17 @@ csp_has_origin() {
   local origin="${3-}"
   local escaped_directive escaped_origin
 
-  # A directive or an origin carrying whitespace is more than one token. The
-  # pattern below anchors on token boundaries, so matching such a value would
-  # compare against the wrong part of the policy; it is rejected instead.
+  # A directive or an origin that is EMPTY, or that carries whitespace, is
+  # not one token. The pattern below anchors on token boundaries, so
+  # matching such a value would compare against the wrong part of the
+  # policy; it is rejected instead. The empty case is the dangerous one:
+  # an empty origin makes the origin part of the pattern match the empty
+  # string, so a directive with any value at all would satisfy the rule.
   case "$directive" in
-    *[[:space:]]*) return 1 ;;
+    ''|*[[:space:]]*) return 1 ;;
   esac
   case "$origin" in
-    *[[:space:]]*) return 1 ;;
+    ''|*[[:space:]]*) return 1 ;;
   esac
 
   escaped_directive="$(csp_escape_ere "$directive")"
@@ -110,23 +113,36 @@ csp_has_origin() {
   # rule: a policy value of
   #   script-src 'self' https://example.org/?u=https://cdn.jsdelivr.net
   # would pass the connect-src rule for https://cdn.jsdelivr.net.
+  #
+  # The DIRECTIVE has to start the policy or follow a ";", which is how a
+  # CSP value is split into directives. Without that, a malformed policy
+  # that omits a ';' lets a directive name inside another directive's
+  # source list satisfy a rule:
+  #   img-src data: script-src https://cdn.jsdelivr.net
+  # would pass the script-src rule for https://cdn.jsdelivr.net, although a
+  # browser reads the whole tail as img-src's source list and never sees a
+  # script-src directive at all. Anchoring the directive makes the check
+  # fail closed on that input.
   printf '%s' "$policy" \
-    | grep -qiE "(^|[[:space:];])${escaped_directive}[[:space:]]+([^;]*[[:space:]])?${escaped_origin}([[:space:];/]|$)"
+    | grep -qiE "(^[[:space:]]*|;[[:space:]]*)${escaped_directive}[[:space:]]+([^;]*[[:space:]])?${escaped_origin}([[:space:];/]|$)"
 }
 
 # csp_rule_count
 #
 # How many critical rules csp_missing_directives enforces. The success
 # line in deploy.sh prints this number, so what the operator reads and what
-# the module actually checks cannot drift apart. The count is pinned by
-# tests/deploy/csp-escape.test.ts, which counts the rule checks in the
-# module and compares.
+# the module actually checks cannot drift apart.
+#
+# It is derived, not written down: an empty policy fails every rule, and
+# csp_missing_directives prints one label per failed rule, so counting the
+# labels counts the rules. A literal here would go stale the moment a rule
+# was added or removed.
 csp_rule_count() {
-  printf '7
-'
+  local labels
+  labels="$(csp_missing_directives '' || true)"
+  printf '%s\n' "$labels" | grep -c . || true
 }
 
-# csp_missing_directives <policy>
 #
 # Prints one label per critical directive the policy is missing, one per
 # line, and returns 1 when any is missing. Returns 0 and prints nothing when
@@ -136,12 +152,12 @@ csp_missing_directives() {
   local status=0
 
   if ! printf '%s' "$policy" \
-        | grep -qiE "(^|[[:space:];])frame-ancestors[[:space:]]+'none'[[:space:]]*(;|$)"; then
+        | grep -qiE "(^[[:space:]]*|;[[:space:]]*)frame-ancestors[[:space:]]+'none'[[:space:]]*(;|$)"; then
     printf "frame-ancestors 'none'\n"
     status=1
   fi
   if ! printf '%s' "$policy" \
-        | grep -qiE "(^|[[:space:];])default-src[[:space:]]+'self'[[:space:]]*(;|$)"; then
+        | grep -qiE "(^[[:space:]]*|;[[:space:]]*)default-src[[:space:]]+'self'[[:space:]]*(;|$)"; then
     printf "default-src 'self'\n"
     status=1
   fi

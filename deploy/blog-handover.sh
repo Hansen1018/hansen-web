@@ -25,17 +25,31 @@
 #   - a failed copy leaves no half-written tree behind, so the next run is
 #     not blocked by this run's leftovers.
 #
-# Two ways to use it:
-#   . deploy/blog-handover.sh
-#     -> defines stage_blog_into_staging LIVE_ROOT STAGING_ROOT
-#   BLOG_HANDOVER_RUN=1 sh -s -- LIVE_ROOT STAGING_ROOT < deploy/blog-handover.sh
-#     -> runs it directly, which is how the remote branch of deploy.sh uses
-#        it: the same implementation is shipped to the host over stdin, so
-#        the local and remote paths cannot drift apart.
+# The staging root has to exist already. Creating it here would let a
+# typo in the path produce a staging tree holding nothing but blog/, and
+# the swap would then replace the whole site with it.
+#
+# This file DEFINES ONE FUNCTION and nothing else. It is sourced by
+# deploy.sh for the local branch, and shipped to the host over stdin for
+# the remote branch, so the two paths cannot drift apart. The remote
+# branch appends the call to this file before piping it to "sh -s":
+#
+#   stage_blog_into_staging "$1" "$2" || exit 1
+#
+# There is deliberately no environment-variable trigger here. An earlier
+# version took over the shell when BLOG_HANDOVER_RUN=1 was set, so a
+# caller that both set the variable and sourced this file had its shell
+# taken over and exited. The call is appended by the caller instead, so
+# sourcing this file can never exit anything.
 #
 # POSIX sh, not bash: the remote branch runs it with "sh -s". The copy uses
-# "cp -Rp" rather than "cp -a": -a is a GNU extension, and the remote host's
-# cp is exactly the one whose flavour is unknown.
+# "cp -Rp" rather than "cp -a": -a is a GNU extension, and the remote
+# host's cp is exactly the one whose flavour is unknown.
+#
+# The confirmation line below ("blog-handover: ok ...") is the ONLY thing
+# this function writes to stdout, and it goes there on purpose: the caller
+# captures stdout and checks that the marker is in it, which is how it
+# knows the hand-over actually ran on the host.
 
 stage_blog_into_staging() {
   bh_live_root=${1-}
@@ -46,6 +60,39 @@ stage_blog_into_staging() {
   # quietly copy the wrong tree.
   if [ -z "$bh_live_root" ] || [ -z "$bh_staging_root" ]; then
     echo "error: stage_blog_into_staging needs LIVE_ROOT and STAGING_ROOT" >&2
+    return 1
+  fi
+
+  # This module is a standalone entry point, so it does not rely on the
+  # caller having validated the paths. "/" and a ".." component are
+  # refused here as well as in deploy.sh.
+  case "$bh_live_root" in
+    /)
+      echo "error: refusing to use / as the live web root" >&2
+      return 1
+      ;;
+  esac
+  case "$bh_staging_root" in
+    /)
+      echo "error: refusing to use / as the staging root" >&2
+      return 1
+      ;;
+  esac
+  case "/$bh_live_root/" in
+    */../*)
+      echo "error: the live web root must not contain a '..' component ($bh_live_root)" >&2
+      return 1
+      ;;
+  esac
+  case "/$bh_staging_root/" in
+    */../*)
+      echo "error: the staging root must not contain a '..' component ($bh_staging_root)" >&2
+      return 1
+      ;;
+  esac
+
+  if [ ! -d "$bh_staging_root" ]; then
+    echo "error: the staging root $bh_staging_root does not exist or is not a directory" >&2
     return 1
   fi
 
@@ -73,33 +120,33 @@ stage_blog_into_staging() {
   fi
 
   # The remote host's sh has no "set -e", so every step is checked here.
-  if ! mkdir -p "$bh_staging_root/blog" 2>/dev/null; then
+  # The underlying error is kept and printed: "permission denied" and "no
+  # space left on device" are what the operator needs, and swallowing them
+  # leaves only a generic message to work with.
+  bh_mkdir_err="$(mkdir -p "$bh_staging_root/blog" 2>&1)" || {
     echo "error: could not create $bh_staging_root/blog" >&2
+    if [ -n "$bh_mkdir_err" ]; then
+      echo "       $bh_mkdir_err" >&2
+    fi
     return 1
-  fi
+  }
 
-  if ! cp -Rp "$bh_live_root/blog/." "$bh_staging_root/blog/" 2>/dev/null; then
+  bh_cp_err="$(cp -Rp "$bh_live_root/blog/." "$bh_staging_root/blog/" 2>&1)" || {
     echo "error: could not copy $bh_live_root/blog into $bh_staging_root/blog" >&2
-    # Leave no half-written tree behind: the next run would otherwise hit the
-    # "both exist" refusal above on this run's leftovers and blame the
-    # live web root for them.
-    rm -rf "$bh_staging_root/blog"
+    if [ -n "$bh_cp_err" ]; then
+      echo "       $bh_cp_err" >&2
+    fi
+    # Leave no half-written tree behind: the next run would otherwise hit
+    # the "both exist" refusal above on this run's leftovers and blame the
+    # live web root for them. If the cleanup itself fails, say so, because
+    # the next run WILL hit that refusal and the operator has to know why.
+    if ! rm -rf "$bh_staging_root/blog"; then
+      echo "warning: could not remove the partial $bh_staging_root/blog;" >&2
+      echo "         remove it before the next deploy" >&2
+    fi
     return 1
-  fi
+  }
 
   echo "blog-handover: ok (carried $bh_live_root/blog)"
   return 0
 }
-
-# The remote entry point runs this file with "sh -s" and the script on
-# standard input. It prints a confirmation the caller checks, because a
-# connection that shares or truncates stdin would otherwise skip the
-# hand-over silently, and the swap that follows would drop blog/ with a
-# green deploy.
-if [ "${BLOG_HANDOVER_RUN:-}" = "1" ]; then
-  if stage_blog_into_staging "${1-}" "${2-}"; then
-    exit 0
-  else
-    exit 1
-  fi
-fi

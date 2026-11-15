@@ -51,41 +51,70 @@ remote_quote() {
   printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
 }
 
-# validate_remote_dir PATH
+# normalize_remote_dir PATH
 #
-# REFUSE rather than trust REMOTE_DIR. It is the argument of the swap's
-# "rm -rf", and it reaches the remote shell inside the ssh command string,
-# so a path that is not where it claims to be deletes something else.
+# Print PATH with its trailing slashes trimmed, refusing the shapes that
+# would make the swap delete something other than the web root:
+#   - an empty path,
+#   - the root directory, in every spelling (/, //, /., /./),
+#   - a "." or ".." component, which means the path names somewhere else
+#     than it says.
 #
-# The path must be absolute, must not be the root, and must not contain a
-# ".." component. Each of those was reachable: REMOTE_DIR is overridable
-# through the environment, and "REMOTE_DIR=/" would have passed a
-# character allow-list on its own and reached "rm -rf /". Requiring an
-# absolute path also rules out a leading "-", which would otherwise read
-# as an option.
+# The path is the argument of the swap's "rm -rf", so it is checked rather
+# than trusted: REMOTE_DIR is overridable through the environment, and
+# "REMOTE_DIR=/" reaches "rm -rf /" unless something refuses it.
+#
+# The trailing slash matters too: without trimming it, "/var/www/site/"
+# derives the staging directory "/var/www/site/.tmp" instead of
+# "/var/www/site.tmp" -- a different directory, and one inside the web root.
 #
 # --- remote path validation (begin) ---
-validate_remote_dir() {
-  case "$1" in
-    "") 
+normalize_remote_dir() {
+  local path="$1"
+
+  while [ "${path%/}" != "$path" ] && [ "$path" != "/" ]; do
+    path="${path%/}"
+  done
+
+  case "$path" in
+    "")
       echo "✗ REMOTE_DIR must not be empty" >&2
       return 1
       ;;
-    /*) ;;
-    *)
-      echo "✗ REMOTE_DIR must be an absolute path (got: $1)" >&2
+  esac
+
+  case "$path" in
+    /|//|/.|/./)
+      echo "✗ REMOTE_DIR must not be the root directory (got: $1)" >&2
       return 1
       ;;
   esac
-  case "$1" in
-    /)
-      echo "✗ REMOTE_DIR must not be the root directory" >&2
-      return 1
-      ;;
-  esac
-  case "/$1/" in
+
+  case "/$path/" in
     */../*)
       echo "✗ REMOTE_DIR must not contain a '..' component (got: $1)" >&2
+      return 1
+      ;;
+    */./*)
+      echo "✗ REMOTE_DIR must not contain a '.' component (got: $1)" >&2
+      return 1
+      ;;
+  esac
+
+  printf '%s\n' "$path"
+}
+
+# require_absolute_path PATH
+#
+# The remote branch hands the path to another host: it goes into the ssh
+# command strings and into rsync's own remote command line, where a
+# relative path would name something else entirely. The local branch keeps
+# its paths local, so a relative REMOTE_DIR stays allowed there.
+require_absolute_path() {
+  case "$1" in
+    /*) return 0 ;;
+    *)
+      echo "✗ REMOTE_DIR must be an absolute path in remote mode (got: $1)" >&2
       return 1
       ;;
   esac
@@ -93,9 +122,7 @@ validate_remote_dir() {
 # --- remote path validation (end) ---
 
 
-# Checked before the build, so a bad path fails in a second rather than
-# after a full build, and long before anything is deleted.
-validate_remote_dir "$REMOTE_DIR" || exit 1
+
 # Deploy mode selection
 if [[ -n "${1:-}" ]]; then
   DEPLOY_MODE="remote"
@@ -105,6 +132,16 @@ else
   DEPLOY_MODE="local"
 fi
 
+# Checked before the build, so a bad path fails in a second rather than
+# after a full build, and long before anything is deleted. The trimmed path
+# is used from here on, so the staging directory is derived from the same
+# string the swap deletes.
+REMOTE_DIR="$(normalize_remote_dir "$REMOTE_DIR")" || exit 1
+if [[ "$DEPLOY_MODE" == "remote" ]]; then
+  # The remote branch hands the path to another host, where a relative path
+  # would name something else entirely.
+  require_absolute_path "$REMOTE_DIR" || exit 1
+fi
 # 1. Local build
 echo "→ Building..."
 npm run build
@@ -112,11 +149,13 @@ npm run build
 # 2. Atomic deploy (prevents serving half-written files)
 if [[ "$DEPLOY_MODE" == "remote" ]]; then
   echo "→ Uploading to $HOST (atomic via tmp dir)..."
-  # REMOTE_DIR was validated above: it is absolute, it is not the root and
-  # it carries no ".." component. What is left can still contain a space or
-  # a quote, so every path that reaches the remote shell is quoted below.
+  # REMOTE_DIR was normalized and validated above: in remote mode it is
+  # absolute, it is not the root, it carries no "." or ".." component, and
+  # its trailing slashes are gone, so the staging path derived from it is
+  # the sibling REMOTE_DIR.tmp and not REMOTE_DIR/.tmp.
   #
-  # The ssh command strings are quoted here. rsync builds its own remote
+  # What is left can still contain a space or a quote, so every path that
+  # reaches the remote shell is quoted below. rsync builds its own remote
   # command line and escapes the path itself, so it needs nothing extra.
   #
   # Measured, with an unquoted REMOTE_DIR containing a space, the remote
@@ -138,14 +177,20 @@ if [[ "$DEPLOY_MODE" == "remote" ]]; then
   # truncated: the remote shell would run an empty script, exit 0 and
   # print nothing, and the swap below would drop blog/ with a green
   # deploy. So the remote side prints a confirmation and it is checked.
-  handover_out="$(ssh "$HOST" "BLOG_HANDOVER_RUN=1 sh -s -- ${REMOTE_DIR_Q} ${REMOTE_DIR_TMP_Q}" < "$BLOG_HANDOVER_SH")" || {
-    echo "✗ the blog hand-over failed on $HOST" >&2
+  #
+  # stdout and stderr are captured together, so a refusal on the host is
+  # shown to the operator here instead of being lost.
+  handover_script="$(cat "$BLOG_HANDOVER_SH"; printf '\nstage_blog_into_staging "$1" "$2" || exit 1\n')"
+  handover_out="$(printf '%s\n' "$handover_script" | ssh "$HOST" "sh -s -- ${REMOTE_DIR_Q} ${REMOTE_DIR_TMP_Q}" 2>&1)" || {
+    echo "✗ the blog hand-over failed on $HOST:" >&2
+    printf '%s\n' "$handover_out" >&2
     exit 1
   }
   case "$handover_out" in
     *"blog-handover: ok"*) ;;
     *)
-      echo "✗ the blog hand-over did not complete on $HOST; refusing to swap" >&2
+      echo "✗ the blog hand-over did not complete on $HOST; refusing to swap:" >&2
+      printf '%s\n' "$handover_out" >&2
       exit 1
       ;;
   esac
@@ -157,7 +202,14 @@ else
   # The Hugo blog repo deploys blog/feed.json into this same web root
   # (its deploy.sh sets WEB_DIR=/var/www/hansen-web). Carry it into the
   # staging dir so the atomic swap below does not drop it.
-  stage_blog_into_staging "$REMOTE_DIR" "$REMOTE_DIR.tmp"
+  # The hand-over refuses rather than swapping: if it fails, the live
+  # blog/ would be dropped by the swap below, so the swap does not run.
+  # The check is explicit rather than left to "set -e", so it keeps
+  # protecting the swap if this line is ever moved into an if/|| block.
+  if ! stage_blog_into_staging "$REMOTE_DIR" "$REMOTE_DIR.tmp"; then
+    echo "✗ the blog hand-over failed; refusing to swap" >&2
+    exit 1
+  fi
   rm -rf "$REMOTE_DIR"
   mv "$REMOTE_DIR.tmp" "$REMOTE_DIR"
 fi
