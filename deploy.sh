@@ -58,7 +58,13 @@ LOCAL_PORT="${LOCAL_PORT:-8081}"
 # skipped without an error, and the same word splitting reached the
 # "rm -rf $REMOTE_DIR" line, which deletes the wrong paths.
 remote_quote() {
-  printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+  # A failure here would leave the operator with an empty quoted path and
+  # no clue why, so the failure is returned to the caller, which names the
+  # path in the message. The body keeps no brace block, so the function can
+  # still be lifted out of this file whole.
+  local quoted
+  quoted="$(printf '%s' "$1" | sed "s/'/'\\\\''/g")" || return 1
+  printf "'%s'" "$quoted"
 }
 
 # The path rules live in deploy/blog-handover.sh, which deploy.sh sources
@@ -163,8 +169,14 @@ if [[ "$DEPLOY_MODE" == "remote" ]]; then
   # metacharacter arrives at the remote shell as ONE backslash-escaped
   # word ("/var/www/my\ site/blog/"), so it cannot split into another
   # argument or become a command.
-  REMOTE_DIR_Q="$(remote_quote "$REMOTE_DIR")"
-  REMOTE_DIR_TMP_Q="$(remote_quote "$REMOTE_DIR.tmp")"
+  REMOTE_DIR_Q="$(remote_quote "$REMOTE_DIR")" || {
+    echo "✗ could not quote the path for the remote shell (got: $REMOTE_DIR)" >&2
+    exit 1
+  }
+  REMOTE_DIR_TMP_Q="$(remote_quote "$REMOTE_DIR.tmp")" || {
+    echo "✗ could not quote the path for the remote shell (got: $REMOTE_DIR.tmp)" >&2
+    exit 1
+  }
   ssh "$HOST" "mkdir -p ${REMOTE_DIR_TMP_Q}"
   rsync -a --delete "$LOCAL_OUT/" "$HOST:$REMOTE_DIR.tmp/"
   # The Hugo blog repo deploys blog/feed.json into this same web root
@@ -231,7 +243,7 @@ if [[ "$DEPLOY_MODE" == "remote" ]]; then
   elif [ "$handover_out" = "$expected_noroot" ]; then
     echo "  ⚠ the live web root $REMOTE_DIR does not exist on $HOST; nothing to carry over" >&2
   else
-    echo "✗ the blog hand-over did not report success on $HOST$ (ssh exit $handover_status); refusing to swap" >&2
+    echo "✗ the blog hand-over did not report success on $HOST (ssh exit $handover_status); refusing to swap" >&2
     exit 1
   fi
   ssh "$HOST" "rm -rf ${REMOTE_DIR_Q} && mv ${REMOTE_DIR_TMP_Q} ${REMOTE_DIR_Q}"
@@ -371,7 +383,10 @@ else
       # is a fault HERE, while a directive the served policy does not
       # carry is a fault in the deployment. They are kept apart here so
       # the report says which one it is.
-      csp_findings="$(csp_missing_directives "$actual_value" || true)"
+      # The status is kept, so a module that FAILED without a word is
+      # not read as "nothing to report".
+      csp_status=0
+      csp_findings="$(csp_missing_directives "$actual_value")" || csp_status=$?
       missing_directives=""
       rule_list_problems=""
       while IFS= read -r csp_line; do
@@ -385,6 +400,11 @@ else
             ;;
         esac
       done <<< "$csp_findings"
+      # A module that failed without saying anything is not "nothing to
+      # report": it is a fault in the rule list, and the deploy refuses.
+      if [ -z "$csp_findings" ] && [ "$csp_status" -ne 0 ]; then
+        rule_list_problems="the CSP rules could not be evaluated"
+      fi
       if [[ -n "$missing_directives" || -n "$rule_list_problems" ]]; then
         weak=1
       fi

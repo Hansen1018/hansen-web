@@ -63,11 +63,6 @@
 #   - an unescaped '.' in a directive made 'connect.src' match
 #     'connect-src', so a rule for one directive was satisfied by another.
 #
-# The character class is the set of ERE metacharacters: . [ ] \ ^ $ * + ?
-# ( ) { } |. Everything else is literal and is left alone.
-# The bracket expression puts the closing bracket first, where a bracket
-# expression treats it as a literal, and the backslash is a literal
-# backslash (POSIX bracket expressions do not use backslash as an escape).
 # csp_rule_field_is_valid <field>
 #
 # A rule field is ONE token: not empty, and carrying no whitespace. A
@@ -82,6 +77,11 @@ csp_rule_field_is_valid() {
   return 0
 }
 
+# The character class is the set of ERE metacharacters: . [ ] \ ^ $ * + ?
+# ( ) { } |. Everything else is literal and is left alone.
+# The bracket expression puts the closing bracket first, where a bracket
+# expression treats it as a literal, and the backslash is a literal
+# backslash (POSIX bracket expressions do not use backslash as an escape).
 csp_escape_ere() {
   # An empty TEXT has no escaped form, and an empty pattern in an ERE
   # matches EVERY text, so handing one to a matcher would make a rule
@@ -155,12 +155,13 @@ csp_has_origin_folded() {
   # policy; it is rejected instead. The empty case is the dangerous one:
   # an empty origin makes the origin part of the pattern match the empty
   # string, so a directive with any value at all would satisfy the rule.
-  case "$directive" in
-    ''|*[[:space:]]*) return 1 ;;
-  esac
-  case "$origin" in
-    ''|*[[:space:]]*) return 1 ;;
-  esac
+  # The same rule the rule list is held to, checked with the same
+  # helper, so the two copies of the "one token" rule cannot drift
+  # apart: a directive or an origin that is empty, or that carries
+  # whitespace, is not one token.
+  if ! csp_rule_field_is_valid "$directive" || ! csp_rule_field_is_valid "$origin"; then
+    return 1
+  fi
 
   # The escape has to produce something. An empty pattern matches every
   # text, so a failed escape would make this rule pass for any policy at
@@ -351,7 +352,7 @@ csp_missing_directives() {
         ;;
     esac
     if [ -z "$value" ]; then
-      printf "malformed rule: %s\n" "$line"
+      printf "!!malformed rule: %s\n" "$line"
       status=1
       continue
     fi
@@ -362,8 +363,16 @@ csp_missing_directives() {
       canonical)
         # The directive and the value are escaped like the origin below, so
         # a rule written with a '.' or a '+' cannot match something else.
-        canonical_directive="$(csp_escape_ere "$directive")"
-        canonical_value="$(csp_escape_ere "$value")"
+        # The escape has to produce something, exactly as in the origin
+        # branch below: an empty pattern matches every text, so a failed
+        # escape would make this rule pass for any policy at all. The
+        # rule is reported as a fault in the rule list instead.
+        if ! canonical_directive="$(csp_escape_ere "$directive")" ||
+           ! canonical_value="$(csp_escape_ere "$value")"; then
+          printf '!!the rule could not be evaluated: %s\n' "$line"
+          status=1
+          continue
+        fi
         if ! printf '%s' "$policy" \
               | grep -qiE "(^[[:space:]]*|;[[:space:]]*)${canonical_directive}[[:space:]]+${canonical_value}[[:space:]]*(;|$)"; then
           printf '%s %s\n' "$directive" "$value"

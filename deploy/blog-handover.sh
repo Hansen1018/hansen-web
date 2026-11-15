@@ -279,7 +279,7 @@ bh_fold_agrees_with_kernel() (
   bh_fak_real="$(cd -P "$bh_fak_given" 2>/dev/null && pwd -P)" || exit 0
   bh_fak_folded_real="$(cd -P "$bh_fak_folded" 2>/dev/null && pwd -P)" || exit 0
   if [ "$bh_fak_real" != "$bh_fak_folded_real" ]; then
-    echo "✗ $2 resolves to a different directory once '..' is folded (got: $1)" >&2
+    echo "✗ ${2:-the path} resolves to a different directory once '..' is folded (got: $1)" >&2
     exit 1
   fi
   exit 0

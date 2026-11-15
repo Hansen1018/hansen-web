@@ -169,6 +169,46 @@ describe('deploy.sh wires the shared hand-over into both branches', () => {
 
 
 describe('the hand-over refuses rather than guessing', () => {
+  it('passes the two roots to the remote shell as its first two arguments', () => {
+    // deploy.sh ships the module to the host with "sh -s -- live staging"
+    // and the module reads them as "$1" and "$2". A host whose /bin/sh is
+    // dash passes them the same way, so that is pinned here instead of
+    // being left to the host.
+    const out = execFileSync('sh', ['-s', '--', 'one', 'two'], {
+      input: 'printf "%s|%s\n" "$1" "$2"',
+      encoding: 'utf8',
+    })
+    expect(out.trim()).toBe('one|two')
+  })
+
+  it('refuses a path whose folded form names another directory', () => {
+    // The fold is lexical and the kernel is physical, so a symlink in
+    // the middle of the path makes the two disagree: the fold says one
+    // directory, the kernel another. The module refuses such a path
+    // rather than working on a tree nobody named.
+    const base = scratch()
+    const dir = join(base, 'dir')
+    const target = join(base, 'target')
+    mkdirSync(dir, { recursive: true })
+    mkdirSync(target, { recursive: true })
+    mkdirSync(join(base, 'x'), { recursive: true })
+    mkdirSync(join(dir, 'x'), { recursive: true })
+    symlinkSync(target, join(dir, 'link'))
+    const res = spawnSync(
+      'sh',
+      [
+        '-c',
+        '. "$1"; bh_fold_agrees_with_kernel "$2" "the path"',
+        'kernel-test',
+        modulePath,
+        dir + '/link/../x',
+      ],
+      { encoding: 'utf8' },
+    )
+    expect(res.status).not.toBe(0)
+    expect(res.stderr).toContain('resolves to a different directory')
+  })
+
   it('reports its own message when it is called without its arguments', () => {
     // The shell that sources this file runs under "set -u", so a bare
     // "$1" aborted the whole deploy with an "unbound variable" error
