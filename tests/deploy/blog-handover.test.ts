@@ -237,6 +237,23 @@ describe('the hand-over carries the live blog and refuses the rest', () => {
     expect(res.stdout).toContain('blog-handover: no-blog (')
     expect(res.stdout).not.toContain('blog-handover: ok')
   })
+
+  it('reports a live web root that is not there at all as its own fact', () => {
+    // A first deploy to a host that has nothing yet has no live web root.
+    // That is a different fact from a web root that IS there without the
+    // blog, and the caller compares the marker exactly, so the two must
+    // not be confusable: a mistyped REMOTE_DIR has to be visible.
+    const dir = scratch()
+    const live = join(dir, 'live')
+    const staging = join(dir, 'staging')
+    mkdirSync(staging, { recursive: true })
+
+    const res = handOver(live, staging)
+    expect(res.status).toBe(0)
+    expect(res.stdout).toContain('blog-handover: no-root (no web root at ')
+    expect(res.stdout).not.toContain('blog-handover: no-blog')
+    expect(existsSync(join(staging, 'blog'))).toBe(false)
+  })
 })
 
 describe('the module refuses the paths that would be dangerous on its own', () => {
@@ -443,6 +460,19 @@ describe('the remote hand-over writes exactly one line to stdout', () => {
     const res = remoteHandover(live, staging)
     expect(res.status).toBe(0)
     expect(res.stdout).toBe('blog-handover: ok (carried ' + join(live, 'blog') + ')\n')
+  })
+
+  it('writes the no-root line over the wire when the live root is not there', () => {
+    // The remote side compares the marker exactly, so the "no web root"
+    // fact has to reach it as its own line.
+    const dir = scratch()
+    const live = join(dir, 'live')
+    const staging = join(dir, 'staging')
+    mkdirSync(staging, { recursive: true })
+
+    const res = remoteHandover(live, staging)
+    expect(res.status).toBe(0)
+    expect(res.stdout).toBe('blog-handover: no-root (no web root at ' + live + ')\n')
   })
 
   it('writes nothing but the no-blog line when the live root has no blog', () => {

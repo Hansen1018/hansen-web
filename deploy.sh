@@ -141,7 +141,11 @@ if [[ "$DEPLOY_MODE" == "remote" ]]; then
   # What is left can still contain a space or a quote, so every path that
   # reaches the remote shell is quoted with remote_quote, whose comment
   # carries the measurement behind that quoting. rsync builds its own remote
-  # command line and escapes the path itself, so it needs nothing extra.
+  # command line and escapes the path itself, so it needs nothing extra:
+  # measured with rsync 3.2.7, a remote path with a space or a shell
+  # metacharacter arrives at the remote shell as ONE backslash-escaped
+  # word ("/var/www/my\ site/blog/"), so it cannot split into another
+  # argument or become a command.
   REMOTE_DIR_Q="$(remote_quote "$REMOTE_DIR")"
   REMOTE_DIR_TMP_Q="$(remote_quote "$REMOTE_DIR.tmp")"
   ssh "$HOST" "mkdir -p ${REMOTE_DIR_TMP_Q}"
@@ -188,11 +192,20 @@ if [[ "$DEPLOY_MODE" == "remote" ]]; then
   # operator can see WHICH web root was looked at, and a remote that
   # inspected a different root does not match this marker.
   expected_noblog="$(bh_marker_noblog "$(bh_trim_path "$REMOTE_DIR")")"
+  # The "no web root" marker is a different fact from the "no blog/" marker:
+  # the live web root is not there at all (a first deploy to a host that
+  # has nothing yet), versus a web root that IS there without the blog.
+  # Saying which one it is means a mistyped REMOTE_DIR is visible instead
+  # of silent.
+  expected_noroot="$(bh_marker_noroot "$(bh_trim_path "$REMOTE_DIR")")"
   case "$handover_out" in
     "$expected_ok")
       ;;
     "$expected_noblog")
       echo "  ⚠ the live web root $(bh_trim_path "$REMOTE_DIR") has no blog/ to carry over" >&2
+      ;;
+    "$expected_noroot")
+      echo "  ⚠ the live web root $(bh_trim_path "$REMOTE_DIR") does not exist on $HOST; nothing to carry over" >&2
       ;;
     *)
       echo "✗ the blog hand-over did not report success on $HOST (ssh exit $handover_status); refusing to swap" >&2
@@ -211,6 +224,9 @@ else
   # blog/ would be dropped by the swap below, so the swap does not run.
   # The check is explicit rather than left to "set -e", so it keeps
   # protecting the swap if this line is ever moved into an if/|| block.
+  # The staging tree is left in place when the hand-over refuses: the
+  # module removed the partial blog/ copy it made, and the next run
+  # refreshes the whole staging tree with "rsync --delete".
   if ! stage_blog_into_staging "$REMOTE_DIR" "$REMOTE_DIR.tmp"; then
     echo "✗ the blog hand-over failed; refusing to swap" >&2
     exit 1

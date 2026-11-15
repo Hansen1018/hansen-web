@@ -397,6 +397,53 @@ describe('the rule list fails closed when it is wrong', () => {
   })
 })
 
+describe('the rule list is parsed in one place', () => {
+  it('pins the rules that run, so a rule cannot be dropped silently', () => {
+    // The rule list IS the source of truth, so its contents are pinned
+    // here: a rule that is added, renamed or dropped shows up as a
+    // failing test rather than as a silently weaker check.
+    const script = 'source "$1"; csp_rule_list'
+    const out = execFileSync('bash', ['-c', script, 'rule-test', modulePath], {
+      encoding: 'utf-8',
+    })
+    const rules = out
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+    expect(rules).toEqual([
+      "canonical|frame-ancestors|'none'",
+      "canonical|default-src|'self'",
+      'origin|connect-src|https://cdn.jsdelivr.net',
+      'origin|font-src|https://cdn.jsdelivr.net',
+      'origin|script-src|https://cdnjs.cloudflare.com',
+      'origin|script-src|https://cdn.jsdelivr.net',
+      'origin|style-src|https://cdn.jsdelivr.net',
+    ])
+  })
+
+  it('skips a comment line and refuses a rule with a missing field', () => {
+    // A comment is not a rule, and a rule with an empty field enforces
+    // nothing, so the parser says so instead of counting it as a rule
+    // that ran.
+    const script = [
+      'source "$1"',
+      'csp_rules() { printf "%s\\n" "# a comment" "origin|connect-src|https://cdn.jsdelivr.net" "origin||https://cdn.jsdelivr.net"; }',
+      'csp_rule_list',
+    ].join('\n')
+    const out = execFileSync('bash', ['-c', script, 'rule-test', modulePath], {
+      encoding: 'utf-8',
+    })
+    const rules = out
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+    expect(rules).toEqual([
+      'origin|connect-src|https://cdn.jsdelivr.net',
+      '!!malformed rule: origin||https://cdn.jsdelivr.net',
+    ])
+  })
+})
+
 describe('a policy folded across lines is still matched', () => {
   it('matches an origin whose source list continues on the next line', () => {
     // A CSP header can be folded across lines, and browsers treat the fold

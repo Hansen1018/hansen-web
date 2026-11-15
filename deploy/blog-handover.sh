@@ -156,6 +156,12 @@ bh_fold_path() (
 #     which resolves to a different directory than it appears to name;
 #   - a path that starts with "-", which "rm -rf" would read as an option.
 #
+# The ".." refusal above applies to ABSOLUTE paths. A relative path is
+# judged by the FOLDED path: "out/../site" folds to "site", which names a
+# directory the operator asked for, so it is allowed. Remote mode is
+# stricter: deploy.sh refuses a ".." component in the path it was given,
+# before this file ever sees it (require_no_parent_refs).
+#
 # A relative path that stays INSIDE the current directory is allowed:
 # "./site", "out/../site" and "site/" all name a directory the operator
 # asked for, and a local deploy never leaves this host.
@@ -246,7 +252,7 @@ bh_marker_ok() {
   printf 'blog-handover: ok (carried %s/blog)\n' "$1"
 }
 
-# bh_marker_noblog
+# bh_marker_noblog LIVE_ROOT
 #
 # Print the confirmation for a live web root that has no blog/ to carry
 # over. That is a different fact from a completed hand-over, so it is a
@@ -255,20 +261,32 @@ bh_marker_noblog() {
   printf 'blog-handover: no-blog (no blog/ in %s)\n' "$1"
 }
 
+# bh_marker_noroot LIVE_ROOT
+#
+# Print the confirmation for a live web root that does not exist at all.
+# That is a different fact from a live web root that EXISTS but has no
+# blog/, and the caller can tell the operator which one it is: the first
+# is a first deploy to a host that has nothing there yet, the second is a
+# site that is there without the blog.
+bh_marker_noroot() {
+  printf 'blog-handover: no-root (no web root at %s)\n' "$1"
+}
+
 # bh_canonical_path PATH
 #
 # Print PATH with the symlinks in it resolved, when it names a directory
 # that exists. "cd -P" and "pwd -P" are POSIX; "readlink -f" is not, and
 # the remote host's tools are the ones we cannot assume.
+#
+# When PATH does not resolve, NOTHING is printed and the status is 1: a
+# caller can tell "resolved" from "not resolved" instead of comparing a
+# directory it resolved with a spelling it did not.
 bh_canonical_path() (
   # The body is a subshell, so the working variable cannot leak into the
   # shell that sources this file.
   bh_cp_real="$(cd -P "$1" 2>/dev/null && pwd -P)" || bh_cp_real=""
-  if [ -n "$bh_cp_real" ]; then
-    printf '%s\n' "$bh_cp_real"
-  else
-    printf '%s\n' "$1"
-  fi
+  [ -n "$bh_cp_real" ] || exit 1
+  printf '%s\n' "$bh_cp_real"
 )
 
 # stage_blog_into_staging LIVE_ROOT STAGING_ROOT
@@ -308,8 +326,31 @@ stage_blog_into_staging() (
   # that is the case where the copy and the cleanup destroy the live tree.
   bh_live_folded="$(bh_fold_path "$bh_live_root")"
   bh_staging_folded="$(bh_fold_path "$bh_staging_root")"
-  bh_live_real="$(bh_canonical_path "$bh_live_folded")"
-  bh_staging_real="$(bh_canonical_path "$bh_staging_folded")"
+  # The staging root must exist: the copy writes into it and the cleanup
+  # deletes from it. It is also compared by the directory it resolves to,
+  # never by the spelling it was given, so a path that cannot be resolved
+  # is refused here instead of being compared as a raw string.
+  if [ ! -d "$bh_staging_folded" ]; then
+    echo "error: the staging root $bh_staging_folded does not exist or is not a directory" >&2
+    exit 1
+  fi
+  bh_staging_real="$(bh_canonical_path "$bh_staging_folded")" || {
+    echo "error: could not resolve the staging root $bh_staging_folded to a directory" >&2
+    exit 1
+  }
+  # The live web root may be absent: that is a first deploy to a host that
+  # has nothing there yet. There is no live tree to protect then, so the
+  # comparison below is made on the paths as given, and the hand-over
+  # reports "no root" for it.
+  if [ -d "$bh_live_folded" ]; then
+    bh_live_real="$(bh_canonical_path "$bh_live_folded")" || {
+      echo "error: could not resolve the live web root $bh_live_folded to a directory" >&2
+      exit 1
+    }
+  else
+    bh_live_real="$bh_live_folded"
+    bh_staging_real="$bh_staging_folded"
+  fi
   # The copy, the inspection and the cleanup work on the FOLDED roots: the
   # checks judged those, so those are what is operated on.
   bh_live_dir="$bh_live_folded"
@@ -332,11 +373,6 @@ stage_blog_into_staging() (
       ;;
   esac
 
-  if [ ! -d "$bh_staging_dir" ]; then
-    echo "error: the staging root $bh_staging_dir does not exist or is not a directory" >&2
-    exit 1
-  fi
-
   if [ ! -d "$bh_live_dir/blog" ]; then
     # A blog that exists but is not a directory cannot be carried over, and
     # treating it as "no blog here" would drop it at the swap, which is the
@@ -351,6 +387,13 @@ stage_blog_into_staging() (
     if [ -e "$bh_live_dir/blog" ]; then
       echo "error: $bh_live_dir/blog exists but is not a directory; nothing was carried over" >&2
       exit 1
+    fi
+    if [ ! -d "$bh_live_dir" ]; then
+      # The live web root is not there at all, which is a first deploy to
+      # a host that has nothing yet. That is a different fact from a web
+      # root that IS there without the blog, and the caller says which.
+      bh_marker_noroot "$bh_live_root"
+      exit 0
     fi
     bh_marker_noblog "$bh_live_root"
     exit 0
@@ -397,7 +440,11 @@ stage_blog_into_staging() (
   # The underlying error is kept and printed: "permission denied" and "no
   # space left on device" are what the operator needs, and swallowing them
   # leaves only a generic message to work with.
-  bh_mkdir_err="$(mkdir -p "$bh_staging_dir/blog" 2>&1)" || {
+  # "mkdir" and not "mkdir -p": the guard above refused a staging blog/
+  # that already existed, so this directory is created HERE, and "mkdir"
+  # proves it. If it fails because the directory is there, another deploy
+  # created it in between, and this run does not adopt it.
+  bh_mkdir_err="$(mkdir "$bh_staging_dir/blog" 2>&1)" || {
     echo "error: could not create $bh_staging_dir/blog" >&2
     if [ -n "$bh_mkdir_err" ]; then
       echo "       $bh_mkdir_err" >&2
