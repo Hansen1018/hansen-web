@@ -132,7 +132,9 @@ csp_fold_policy() {
 # another directive's source list is not a directive at all.
 csp_has_origin() {
   local policy="${1-}"
-  policy="$(csp_fold_policy "$policy")"
+  # A fold that fails leaves no policy to match, so the rule is reported
+  # as NOT satisfied rather than as satisfied by an empty policy.
+  policy="$(csp_fold_policy "$policy")" || return 1
   csp_has_origin_folded "$policy" "${2-}" "${3-}"
 }
 
@@ -308,7 +310,8 @@ csp_missing_directives() {
   local canonical_directive canonical_value
   local line rest
 
-  policy="$(csp_fold_policy "$policy")"
+  # A fold that fails leaves no policy to check, so nothing is satisfied.
+  policy="$(csp_fold_policy "$policy")" || return 1
 
   # The rules come from csp_rule_list, the same list csp_rule_count counts,
   # so the number the operator reads and the rules that run are the same
@@ -324,7 +327,7 @@ csp_missing_directives() {
         # cannot be parsed is a fault in this repository, not something
         # the served policy is missing.
         printf '%s\n' "$line"
-        broken_rules=$(( ${broken_rules:-0} + 1 ))
+        broken_rules=$((broken_rules + 1))
         status=1
         continue
         ;;
@@ -333,33 +336,12 @@ csp_missing_directives() {
     rest="${line#*|}"
     directive="${rest%%|*}"
     value="${rest#*|}"
-    case "$rest" in
-      *'|'*)
-        : ;;
-      *)
-        # A line that is neither a rule nor a "!!" label is a rule list
-        # that did not come out whole. It is refused rather than parsed
-        # as a rule with the wrong fields, which would enforce nothing
-        # while being counted as a rule that ran.
-        printf "!!malformed rule: %s\n" "$line"
-        status=1
-        continue
-        ;;
-    esac
-    case "$kind" in
-      canonical|origin)
-        ;;
-      *)
-        printf "!!unknown rule kind: %s\n" "$kind"
-        status=1
-        continue
-        ;;
-    esac
-    if [ -z "$value" ]; then
-      printf "!!malformed rule: %s\n" "$line"
-      status=1
-      continue
-    fi
+    # The rule list is parsed in ONE place, csp_rule_list, and what
+    # arrives here has been through it: a rule that named an unknown
+    # kind, a missing field or a field that is not one token never gets
+    # this far. The loop therefore does not re-check the fields - a
+    # second copy of the parsing contract is a second place to forget to
+    # update - and the dispatch below refuses a kind it does not know.
     # The count is the number of rules in the PARSED list, which is what
     # csp_rule_count reports: both read the same list, so the number the
     # operator reads and the number of rules this loop walked cannot drift
@@ -396,6 +378,13 @@ csp_missing_directives() {
           status=1
         fi
         ;;
+      *)
+        # A kind this loop does not know is refused rather than skipped:
+        # a rule that is silently not enforced is a rule nobody checks,
+        # and the count would claim that it ran.
+        printf '!!unknown rule kind: %s\n' "$kind"
+        status=1
+        ;;
     esac
   done < <(csp_rule_list)
 
@@ -407,7 +396,7 @@ csp_missing_directives() {
     # fault: the rules ARE defined, they just cannot run. Saying "no
     # critical rules are defined" there would blame an empty list for a
     # broken one, so the two are reported apart.
-    if [ "${broken_rules:-0}" -gt 0 ]; then
+    if [ "$broken_rules" -gt 0 ]; then
       echo "!!no critical rule could be enforced"
       echo "the CSP rule list is broken; refusing to report the policy as verified" >&2
     else

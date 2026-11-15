@@ -20,6 +20,12 @@
 #   - a source that is not a directory at all is an error, not a silent
 #     no-op: returning 0 there would let the swap drop the blog without a
 #     word, which is the 404 this script exists to prevent;
+#
+# The contract of every predicate in this file: it either returns 0, or
+# it exits 1 from its own subshell with a message on stderr. The callers
+# are expected to run them where a non-zero status stops the deploy
+# (deploy.sh runs under "set -euo pipefail"), and the remote entry point
+# turns that status into the exit status of the remote shell.
 #   - a failed copy leaves no half-written tree behind, so the next run is
 #     not blocked by this run's leftovers.
 #
@@ -407,8 +413,11 @@ stage_blog_into_staging() (
       exit 1
     }
   else
+    # The live web root has no canonical form, because it does not
+    # exist. The staging root keeps the one it has: the containment
+    # guards below compare the directory a path RESOLVES to, and
+    # throwing that away would compare a raw spelling instead.
     bh_live_real="$bh_live_folded"
-    bh_staging_real="$bh_staging_folded"
   fi
   # The copy, the inspection and the cleanup work on the FOLDED roots: the
   # checks judged those, so those are what is operated on.
