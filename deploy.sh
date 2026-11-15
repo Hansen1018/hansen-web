@@ -35,11 +35,21 @@ if [[ "$DEPLOY_MODE" == "remote" ]]; then
   echo "→ Uploading to $HOST (atomic via tmp dir)..."
   ssh "$HOST" "mkdir -p $REMOTE_DIR.tmp"
   rsync -a --delete "$LOCAL_OUT/" "$HOST:$REMOTE_DIR.tmp/"
+  # The Hugo blog repo deploys blog/feed.json into this same web root
+  # (its deploy.sh sets WEB_DIR=/var/www/hansen-web). Carry it into the
+  # staging dir so the atomic swap below does not drop it.
+  ssh "$HOST" "if [ -d $REMOTE_DIR/blog ]; then cp -a $REMOTE_DIR/blog $REMOTE_DIR.tmp/; fi"
   ssh "$HOST" "rm -rf $REMOTE_DIR && mv $REMOTE_DIR.tmp $REMOTE_DIR"
 else
   echo "→ Deploying locally to $REMOTE_DIR (atomic via tmp dir)..."
   mkdir -p "$REMOTE_DIR.tmp"
   rsync -a --delete "$LOCAL_OUT/" "$REMOTE_DIR.tmp/"
+  # The Hugo blog repo deploys blog/feed.json into this same web root
+  # (its deploy.sh sets WEB_DIR=/var/www/hansen-web). Carry it into the
+  # staging dir so the atomic swap below does not drop it.
+  if [ -d "$REMOTE_DIR/blog" ]; then
+    cp -a "$REMOTE_DIR/blog" "$REMOTE_DIR.tmp/"
+  fi
   rm -rf "$REMOTE_DIR"
   mv "$REMOTE_DIR.tmp" "$REMOTE_DIR"
 fi
