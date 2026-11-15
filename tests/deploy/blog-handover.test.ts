@@ -186,3 +186,96 @@ describe('the remote entry point turns a refusal into an exit status', () => {
     expect(result.stderr).toContain('both exist')
   })
 })
+
+describe('the hand-over refuses a tree it cannot carry over', () => {
+  it('rejects a live blog that is not a directory', () => {
+    // A blog that exists but is not a directory cannot be carried over, and
+    // treating it as "no blog here" would drop it at the swap, which is the
+    // 404 this script exists to prevent.
+    const dir = scratch()
+    const live = join(dir, 'live')
+    const staging = join(dir, 'staging')
+    writeFile(join(live, 'blog'), 'not a directory')
+    mkdirSync(staging, { recursive: true })
+
+    const res = handOver(live, staging)
+    expect(res.status).not.toBe(0)
+    expect(res.stderr).toContain('not a directory')
+  })
+
+  it('prints a confirmation the caller can check', () => {
+    // The remote side is fed over stdin, which can arrive empty or
+    // truncated. The confirmation is what tells the caller the hand-over
+    // actually ran.
+    const dir = scratch()
+    const live = join(dir, 'live')
+    const staging = join(dir, 'staging')
+    writeFile(join(live, 'blog', 'feed.json'), 'live')
+    mkdirSync(staging, { recursive: true })
+
+    const res = handOver(live, staging)
+    expect(res.status).toBe(0)
+    expect(res.stdout).toContain('blog-handover: ok')
+  })
+})
+
+describe('deploy.sh validates REMOTE_DIR before it deletes anything', () => {
+  // The validation lives in deploy.sh, so it is exercised the way deploy.sh
+  // runs it: the function is extracted and sourced, then called.
+  function validate(path: string): string {
+    const src = readFileSync(deployShPath, 'utf8')
+    const begin = '--- remote path validation (begin) ---'
+    const end = '--- remote path validation (end) ---'
+    const i = src.indexOf(begin)
+    const j = src.indexOf(end)
+    if (i === -1 || j === -1) {
+      throw new Error('remote path validation markers not found in deploy.sh')
+    }
+    const block = src.slice(src.indexOf('validate_remote_dir() {', i), j)
+    const script =
+      'exec 2>&1\n' + block +
+      '\nvalidate_remote_dir "$1" && echo "exit=0" || echo "exit=1"'
+    return execFileSync('bash', ['-c', script, 'validate-test', path], {
+      encoding: 'utf8',
+    })
+  }
+
+  it('accepts an ordinary absolute path', () => {
+    expect(validate('/var/www/hansen-web')).toContain('exit=0')
+  })
+
+  it('refuses a relative path, the root, and a .. component', () => {
+    expect(validate('hansen-web')).toContain('absolute path')
+    expect(validate('/')).toContain('root')
+    expect(validate('/var/www/../etc')).toContain('..')
+  })
+})
+
+describe('the remote path is quoted and the hand-over is confirmed', () => {
+  const src = readFileSync(deployShPath, 'utf8')
+
+  it('checks that the hand-over reported success', () => {
+    // The hand-over is fed to the host over stdin. If that stdin arrives
+    // empty or truncated, the remote shell runs an empty script, exits 0 and
+    // prints nothing, and the swap that follows would drop blog/ with a
+    // green deploy.
+    expect(src).toContain('blog-handover: ok')
+    expect(src).toContain('refusing to swap')
+  })
+
+  it('quotes a path with a space and a quote into a single argument', () => {
+    const begin = src.indexOf('remote_quote() {')
+    const end = src.indexOf('}', begin)
+    if (begin === -1 || end === -1) {
+      throw new Error('remote_quote not found in deploy.sh')
+    }
+    const fn = src.slice(begin, end + 1)
+    const script =
+      'set -u\n' + fn +
+      '\nq="$(remote_quote "$1")"\neval "set -- $q"\necho "count=$# arg=$1"'
+    const out = execFileSync('bash', ['-c', script, 'quote-test', "/var/www/han sen'web"], {
+      encoding: 'utf8',
+    })
+    expect(out.trim()).toBe("count=1 arg=/var/www/han sen'web")
+  })
+})

@@ -169,3 +169,60 @@ describe('a token has to be a single token', () => {
     expect(out.trim()).toBe('yes')
   })
 })
+
+describe('the origin may be the first source in the directive value', () => {
+  // A review comment claimed the leading-boundary requirement does not hold
+  // when the origin comes first. Measured, it does hold: the origin is
+  // anchored either by the whitespace that ends the directive name or by
+  // the whitespace the optional lead-in group ends with.
+  it('matches an origin that is the first source', () => {
+    expect(
+      hasOrigin('connect-src https://cdn.jsdelivr.net;', 'connect-src', 'https://cdn.jsdelivr.net'),
+    ).toBe(true)
+    expect(
+      hasOrigin("connect-src 'self' https://cdn.jsdelivr.net;", 'connect-src', 'https://cdn.jsdelivr.net'),
+    ).toBe(true)
+  })
+
+  it('still rejects an origin embedded in another host query string', () => {
+    expect(
+      hasOrigin(
+        'connect-src https://example.org/?u=https://cdn.jsdelivr.net;',
+        'connect-src',
+        'https://cdn.jsdelivr.net',
+      ),
+    ).toBe(false)
+  })
+
+  it('matches the directive and the origin case-insensitively', () => {
+    // CSP directive names and host names are case-insensitive, so
+    // CONNECT-SRC has to satisfy the connect-src rule. Kept deliberately:
+    // escaping the pattern makes its metacharacters literal, it does not
+    // make the comparison case-sensitive.
+    expect(
+      hasOrigin('CONNECT-SRC https://cdn.jsdelivr.net;', 'connect-src', 'https://cdn.jsdelivr.net'),
+    ).toBe(true)
+  })
+})
+
+describe('the rule count the operator sees matches the rules that run', () => {
+  it('counts the same number of rules the module enforces', () => {
+    // The success line in deploy.sh prints a number. If that number and the
+    // rules the module enforces drift apart, the operator is told something
+    // that is not true, so the count is checked against the module itself.
+    const src = readFileSync(modulePath, 'utf8')
+    const start = src.indexOf('csp_missing_directives() {')
+    if (start === -1) {
+      throw new Error('csp_missing_directives not found in deploy/csp-assert.sh')
+    }
+    const end = src.indexOf('\n}\n', start)
+    if (end === -1) {
+      throw new Error('end of csp_missing_directives not found in deploy/csp-assert.sh')
+    }
+    const body = src.slice(start, end)
+    const rules = (body.match(/if ! /g) ?? []).length
+    const script = 'source "$1"; csp_rule_count'
+    const out = execFileSync('bash', ['-c', script, 'count-test', modulePath], { encoding: 'utf8' })
+    expect(Number(out.trim())).toBe(rules)
+  })
+})

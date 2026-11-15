@@ -29,7 +29,7 @@ fi
 # file to the host over stdin, so the two paths cannot drift apart.
 BLOG_HANDOVER_SH="$CSP_ASSERT_DIR/deploy/blog-handover.sh"
 if [[ ! -f "$BLOG_HANDOVER_SH" ]]; then
-  echo "missing $BLOG_HANDOVER_SH (deploy.sh needs a full repo checkout)" >&2
+  echo "✗ missing $BLOG_HANDOVER_SH (deploy.sh needs a full repo checkout)" >&2
   exit 1
 fi
 . "$BLOG_HANDOVER_SH"
@@ -41,16 +41,61 @@ LOCAL_PORT="${LOCAL_PORT:-8081}"
 
 # remote_quote PATH
 #
-# Print PATH quoted for the remote shell, so a path containing a space
-# survives the word splitting the remote shell performs on the command
+# Print PATH quoted for the remote shell, so a path that contains a space or a
+# quote survives the word splitting the remote shell performs on the command
 # string. REMOTE_DIR is overridable through the environment, so this is not
-# hypothetical: measured, an unquoted REMOTE_DIR containing a space made
-# the remote command fail with "too many arguments", and the blog hand-over
-# was then skipped without an error.
+# hypothetical: measured, an unquoted REMOTE_DIR containing a space made the
+# remote guard fail with "too many arguments", and the blog hand-over was
+# then skipped without an error.
 remote_quote() {
-  printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\''/g")"
+  printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
 }
 
+# validate_remote_dir PATH
+#
+# REFUSE rather than trust REMOTE_DIR. It is the argument of the swap's
+# "rm -rf", and it reaches the remote shell inside the ssh command string,
+# so a path that is not where it claims to be deletes something else.
+#
+# The path must be absolute, must not be the root, and must not contain a
+# ".." component. Each of those was reachable: REMOTE_DIR is overridable
+# through the environment, and "REMOTE_DIR=/" would have passed a
+# character allow-list on its own and reached "rm -rf /". Requiring an
+# absolute path also rules out a leading "-", which would otherwise read
+# as an option.
+#
+# --- remote path validation (begin) ---
+validate_remote_dir() {
+  case "$1" in
+    "") 
+      echo "✗ REMOTE_DIR must not be empty" >&2
+      return 1
+      ;;
+    /*) ;;
+    *)
+      echo "✗ REMOTE_DIR must be an absolute path (got: $1)" >&2
+      return 1
+      ;;
+  esac
+  case "$1" in
+    /)
+      echo "✗ REMOTE_DIR must not be the root directory" >&2
+      return 1
+      ;;
+  esac
+  case "/$1/" in
+    */../*)
+      echo "✗ REMOTE_DIR must not contain a '..' component (got: $1)" >&2
+      return 1
+      ;;
+  esac
+}
+# --- remote path validation (end) ---
+
+
+# Checked before the build, so a bad path fails in a second rather than
+# after a full build, and long before anything is deleted.
+validate_remote_dir "$REMOTE_DIR" || exit 1
 # Deploy mode selection
 if [[ -n "${1:-}" ]]; then
   DEPLOY_MODE="remote"
@@ -67,25 +112,17 @@ npm run build
 # 2. Atomic deploy (prevents serving half-written files)
 if [[ "$DEPLOY_MODE" == "remote" ]]; then
   echo "→ Uploading to $HOST (atomic via tmp dir)..."
-  # REMOTE_DIR reaches the remote shell twice: inside the ssh command
-  # strings and inside the remote path rsync is given. The ssh strings are
-  # quoted below, but rsync builds its own remote command line, so the path
-  # is restricted to a conservative character set rather than trusted: a
-  # REMOTE_DIR that could carry a shell metacharacter is a configuration
-  # error, not something to guess at.
+  # REMOTE_DIR was validated above: it is absolute, it is not the root and
+  # it carries no ".." component. What is left can still contain a space or
+  # a quote, so every path that reaches the remote shell is quoted below.
+  #
+  # The ssh command strings are quoted here. rsync builds its own remote
+  # command line and escapes the path itself, so it needs nothing extra.
   #
   # Measured, with an unquoted REMOTE_DIR containing a space, the remote
   # guard failed with "too many arguments", so the blog hand-over was
   # skipped without an error, and the same word-splitting reached
-  # "rm -rf $REMOTE_DIR", which deletes the wrong paths. A local deploy
-  # is unaffected: its paths never leave the local shell.
-  case "$REMOTE_DIR" in
-    *[!A-Za-z0-9._/-]*)
-      echo "error: REMOTE_DIR may only contain letters, digits, '.', '_', '-' and '/'" >&2
-      echo "       (got: $REMOTE_DIR)" >&2
-      exit 1
-      ;;
-  esac
+  # "rm -rf $REMOTE_DIR", which deletes the wrong paths.
   REMOTE_DIR_Q="$(remote_quote "$REMOTE_DIR")"
   REMOTE_DIR_TMP_Q="$(remote_quote "$REMOTE_DIR.tmp")"
   ssh "$HOST" "mkdir -p ${REMOTE_DIR_TMP_Q}"
@@ -96,7 +133,22 @@ if [[ "$DEPLOY_MODE" == "remote" ]]; then
   #
   # The hand-over runs on the host, from the same file the local branch
   # sources, so the two paths cannot drift apart.
-  ssh "$HOST" "BLOG_HANDOVER_RUN=1 sh -s -- ${REMOTE_DIR_Q} ${REMOTE_DIR_TMP_Q}" < "$BLOG_HANDOVER_SH"
+  #
+  # It is fed to the host over stdin, and stdin can arrive empty or
+  # truncated: the remote shell would run an empty script, exit 0 and
+  # print nothing, and the swap below would drop blog/ with a green
+  # deploy. So the remote side prints a confirmation and it is checked.
+  handover_out="$(ssh "$HOST" "BLOG_HANDOVER_RUN=1 sh -s -- ${REMOTE_DIR_Q} ${REMOTE_DIR_TMP_Q}" < "$BLOG_HANDOVER_SH")" || {
+    echo "✗ the blog hand-over failed on $HOST" >&2
+    exit 1
+  }
+  case "$handover_out" in
+    *"blog-handover: ok"*) ;;
+    *)
+      echo "✗ the blog hand-over did not complete on $HOST; refusing to swap" >&2
+      exit 1
+      ;;
+  esac
   ssh "$HOST" "rm -rf ${REMOTE_DIR_Q} && mv ${REMOTE_DIR_TMP_Q} ${REMOTE_DIR_Q}"
 else
   echo "→ Deploying locally to $REMOTE_DIR (atomic via tmp dir)..."
@@ -245,10 +297,11 @@ else
     echo "    These must be configured at the static host (nginx/Caddy)."
     echo "    See deploy/nginx-security-headers.conf for the recommended snippet."
   else
-    # The success line reports the critical rules that were checked (the
-    # rule set in deploy/csp-assert.sh), not the whole policy, so it does
-    # not overstate what was verified.
-    echo "  ✓ all ${#EXPECTED[@]} security headers present (CSP verified for critical directives)"
+    # The success line reports how many critical rules were checked, and
+    # the count comes from the rule module, so the text the operator reads
+    # and the rules that actually run cannot drift apart. It is not a
+    # claim about the whole policy.
+    echo "  ✓ all ${#EXPECTED[@]} security headers present (CSP verified for $(csp_rule_count) critical rules)"
   fi
 fi
 

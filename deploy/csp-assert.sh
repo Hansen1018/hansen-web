@@ -114,6 +114,18 @@ csp_has_origin() {
     | grep -qiE "(^|[[:space:];])${escaped_directive}[[:space:]]+([^;]*[[:space:]])?${escaped_origin}([[:space:];/]|$)"
 }
 
+# csp_rule_count
+#
+# How many critical rules csp_missing_directives enforces. The success
+# line in deploy.sh prints this number, so what the operator reads and what
+# the module actually checks cannot drift apart. The count is pinned by
+# tests/deploy/csp-escape.test.ts, which counts the rule checks in the
+# module and compares.
+csp_rule_count() {
+  printf '7
+'
+}
+
 # csp_missing_directives <policy>
 #
 # Prints one label per critical directive the policy is missing, one per
