@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -60,6 +60,14 @@ const LOOKALIKE = policy({
   'font-src': FONT_WITH_JS,
 })
 
+// The same lookalike host with a trailing path. The origin has to be
+// anchored at its END as well as at its start, so the path form is
+// rejected as well and not only the bare host.
+const LOOKALIKE_WITH_PATH = policy({
+  'connect-src': "'self' https://cdn.jsdelivr.net.evil.example/",
+  'font-src': FONT_WITH_JS,
+})
+
 function missingFor(policyText: string, moduleFile: string = modulePath): string[] {
   const script = 'source "$1"; csp_missing_directives "$2" || true'
   const out = execFileSync('bash', ['-c', script, 'csp-test', moduleFile, policyText], {
@@ -76,7 +84,8 @@ function missingFor(policyText: string, moduleFile: string = modulePath): string
 function wiredCheck(
   policyText: string,
   deploySource: string = readFileSync(deployShPath, 'utf8'),
-): { weak: number; missing: string } {
+  moduleFile: string = modulePath,
+): { weak: number; missing: string; ruleList: string } {
   const begin = '# --- CSP critical-directive verification (begin) ---'
   const end = '# --- CSP critical-directive verification (end) ---'
   const i = deploySource.indexOf(begin)
@@ -88,19 +97,22 @@ function wiredCheck(
   const script = [
     'set -uo pipefail',
     'missing_directives=""',
+    'rule_list_problems=""',
     'weak=0',
     'actual_value="$1"',
     '. "$2"',
     block,
     'echo "weak=$weak"',
     'echo "missing=$missing_directives"',
+    'echo "rulelist=$rule_list_problems"',
   ].join('\n')
-  const out = execFileSync('bash', ['-c', script, 'wire-test', policyText, modulePath], {
+  const out = execFileSync('bash', ['-c', script, 'wire-test', policyText, moduleFile], {
     encoding: 'utf8',
   })
   const weak = out.match(/^weak=(\d+)$/m)?.[1] ?? ''
   const missing = out.match(/^missing=(.*)$/m)?.[1] ?? ''
-  return { weak: Number(weak), missing }
+  const ruleList = out.match(/^rulelist=(.*)$/m)?.[1] ?? ''
+  return { weak: Number(weak), missing, ruleList }
 }
 
 describe('csp_missing_directives', () => {
@@ -182,6 +194,10 @@ describe('csp_missing_directives', () => {
 
   it('rejects a lookalike host', () => {
     expect(missingFor(LOOKALIKE)).toEqual(['connect-src with https://cdn.jsdelivr.net'])
+  })
+
+  it('rejects the lookalike host with a trailing path too', () => {
+    expect(missingFor(LOOKALIKE_WITH_PATH)).toEqual(['connect-src with https://cdn.jsdelivr.net'])
   })
 
   it('accepts the path-prefix and the specific-file source form', () => {
@@ -275,42 +291,37 @@ describe('the suite can detect a broken rule', () => {
     return file
   }
 
-  function ruleBlock(directive: string, origin: string): string {
-    return [
-      '  if ! csp_has_origin "$policy" ' + directive + ' ' + origin + '; then',
-      '    printf "' + directive + ' with ' + origin + '\\n"',
-      '    status=1',
-      '  fi',
-    ].join('\n')
+  function ruleLine(kind: string, directive: string, value: string): string {
+    return kind + '|' + directive + '|' + value
   }
 
   it('fails when the connect-src jsdelivr rule is removed', () => {
     const src = readFileSync(modulePath, 'utf8')
-    const block = ruleBlock('connect-src', 'https://cdn.jsdelivr.net')
-    if (!src.includes(block)) {
+    const line = ruleLine('origin', 'connect-src', 'https://cdn.jsdelivr.net')
+    if (!src.includes(line)) {
       throw new Error('mutation target not found in deploy/csp-assert.sh')
     }
-    expect(mutantBreaksAnAnchor(writeMutant(src.replace(block, '')))).toBe(true)
+    expect(mutantBreaksAnAnchor(writeMutant(src.replace(line + '\n', '')))).toBe(true)
   })
 
   it('fails when the font-src jsdelivr rule is removed', () => {
     const src = readFileSync(modulePath, 'utf8')
-    const block = ruleBlock('font-src', 'https://cdn.jsdelivr.net')
-    if (!src.includes(block)) {
+    const line = ruleLine('origin', 'font-src', 'https://cdn.jsdelivr.net')
+    if (!src.includes(line)) {
       throw new Error('mutation target not found in deploy/csp-assert.sh')
     }
-    expect(mutantBreaksAnAnchor(writeMutant(src.replace(block, '')))).toBe(true)
+    expect(mutantBreaksAnAnchor(writeMutant(src.replace(line + '\n', '')))).toBe(true)
   })
 
   it('fails when a rule points at the wrong directive', () => {
     const src = readFileSync(modulePath, 'utf8')
-    const target = 'csp_has_origin "$policy" connect-src https://cdn.jsdelivr.net'
-    if (!src.includes(target)) {
+    const line = ruleLine('origin', 'connect-src', 'https://cdn.jsdelivr.net')
+    if (!src.includes(line)) {
       throw new Error('mutation target not found in deploy/csp-assert.sh')
     }
     const mutant = src.replace(
-      target,
-      'csp_has_origin "$policy" connect-srcX https://cdn.jsdelivr.net',
+      line,
+      ruleLine('origin', 'connect-srcX', 'https://cdn.jsdelivr.net'),
     )
     expect(mutantBreaksAnAnchor(writeMutant(mutant))).toBe(true)
   })
@@ -330,5 +341,172 @@ describe('the repository layout the suite assumes', () => {
   it('has deploy.sh and the shared rules module where the suite looks for them', () => {
     expect(existsSync(deployShPath)).toBe(true)
     expect(existsSync(modulePath)).toBe(true)
+  })
+})
+
+describe('the rule list fails closed when it is wrong', () => {
+  function moduleWithRules(rules: string): string {
+    const dir = mkdtempSync(join(tmpdir(), 'csp-rules-'))
+    const file = join(dir, 'csp-assert.sh')
+    const src = readFileSync(modulePath, 'utf8')
+    const replaced = src.replace(
+      /cat <<'RULES'[\s\S]*?\nRULES\n/,
+      "cat <<'RULES'\n" + rules + 'RULES\n',
+    )
+    if (replaced === src) throw new Error('the rule list was not found in the module')
+    writeFileSync(file, replaced)
+    return file
+  }
+
+  // spawnSync, not execFileSync: execFileSync returns stdout only, and
+  // these cases are about what the module writes to stderr.
+  function cspRun(policyText: string, moduleFile: string) {
+    const script = 'source "$1"; csp_missing_directives "$2" || true'
+    const out = spawnSync('bash', ['-c', script, 'csp-test', moduleFile, policyText], {
+      encoding: 'utf8',
+    })
+    return { stdout: out.stdout ?? '', stderr: out.stderr ?? '' }
+  }
+
+  it('counts only the rules that run', () => {
+    // The number the operator reads and the rules that run come from one
+    // parse, so a rule list with a typo cannot claim coverage it does
+    // not have.
+    const file = moduleWithRules('origins|connect-src|https://cdn.jsdelivr.net\n')
+    const count = Number(
+      execFileSync('bash', ['-c', 'source "$1"; csp_rule_count', 'count-test', file], {
+        encoding: 'utf8',
+      }).trim(),
+    )
+    expect(count).toBe(0)
+  })
+
+  it('fails when a rule kind is misspelled', () => {
+    // A typo in the kind would leave a rule that does not run counting as
+    // a rule that was checked.
+    const file = moduleWithRules('origins|connect-src|https://cdn.jsdelivr.net\n')
+    const res = cspRun(COMPLETE, file)
+    // The diagnostic is on stdout, because that is what deploy.sh reads:
+    // a rule list it cannot parse must be visible to the operator, not
+    // swallowed while the check reports success.
+    expect(res.stdout).toContain('unknown rule kind')
+  })
+
+  it('fails when the rule list is empty', () => {
+    // An empty list would report every policy as verified while no rule
+    // ran at all.
+    const file = moduleWithRules('')
+    const res = cspRun(COMPLETE, file)
+    expect(res.stdout).toContain('no critical rules are defined')
+  })
+
+  it('refuses a rule whose directive is not one token', () => {
+    // A directive with whitespace in it names something that cannot be
+    // compared with a policy at a token boundary. The origin branch
+    // already refused such a value; the canonical branch is now held to
+    // the same rule, at the parse point, so neither kind of rule can be
+    // compared with the wrong part of the policy.
+    const file = moduleWithRules("canonical|de fault-src|'self'\n")
+    const res = cspRun(COMPLETE, file)
+    expect(res.stdout).toContain('malformed rule')
+  })
+
+  it('refuses a rule whose value is not one token', () => {
+    // The same rule for the value: two sources in one field are two
+    // rules, not one, and the parser cannot tell which one was meant.
+    const file = moduleWithRules('origin|connect-src|https://cdn.jsdelivr.net https://cdn.example\n')
+    const res = cspRun(COMPLETE, file)
+    expect(res.stdout).toContain('malformed rule')
+  })
+
+  it('counts only the rules that can be compared with a policy', () => {
+    // A rule that names no token cannot be enforced, so it must not be
+    // counted as a rule that ran: the number the operator reads has to
+    // be the number of rules that ran.
+    const file = moduleWithRules("canonical|de fault-src|'self'\n")
+    const count = Number(
+      execFileSync('bash', ['-c', 'source "$1"; csp_rule_count', 'count-test', file], {
+        encoding: 'utf8',
+      }).trim(),
+    )
+    expect(count).toBe(0)
+  })
+
+  it('tells a broken rule list apart from an empty one', () => {
+    // The rules ARE defined; they just cannot run. Saying "no critical
+    // rules are defined" there would blame an empty list for a broken
+    // one, and the operator would go looking in the wrong place.
+    const file = moduleWithRules('origins|connect-src|https://cdn.jsdelivr.net\n')
+    const res = cspRun(COMPLETE, file)
+    expect(res.stdout).toContain('no critical rule could be enforced')
+    expect(res.stdout).not.toContain('no critical rules are defined')
+  })
+
+  it('reports a broken rule list as a fault in the rule list, not as a gap in the policy', () => {
+    // deploy.sh has to say WHICH fault it is: a rule list this
+    // repository cannot parse is not the same as a directive the served
+    // policy does not carry.
+    const file = moduleWithRules('origins|connect-src|https://cdn.jsdelivr.net\n')
+    const res = wiredCheck(COMPLETE, readFileSync(deployShPath, 'utf8'), file)
+    expect(res.weak).toBe(1)
+    expect(res.missing).toBe('')
+    expect(res.ruleList).toContain('unknown rule kind')
+  })
+})
+
+describe('the rule list is parsed in one place', () => {
+  it('pins the rules that run, so a rule cannot be dropped silently', () => {
+    // The rule list IS the source of truth, so its contents are pinned
+    // here: a rule that is added, renamed or dropped shows up as a
+    // failing test rather than as a silently weaker check.
+    const script = 'source "$1"; csp_rule_list'
+    const out = execFileSync('bash', ['-c', script, 'rule-test', modulePath], {
+      encoding: 'utf-8',
+    })
+    const rules = out
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+    expect(rules).toEqual([
+      "canonical|frame-ancestors|'none'",
+      "canonical|default-src|'self'",
+      'origin|connect-src|https://cdn.jsdelivr.net',
+      'origin|font-src|https://cdn.jsdelivr.net',
+      'origin|script-src|https://cdnjs.cloudflare.com',
+      'origin|script-src|https://cdn.jsdelivr.net',
+      'origin|style-src|https://cdn.jsdelivr.net',
+    ])
+  })
+
+  it('skips a comment line and refuses a rule with a missing field', () => {
+    // A comment is not a rule, and a rule with an empty field enforces
+    // nothing, so the parser says so instead of counting it as a rule
+    // that ran.
+    const script = [
+      'source "$1"',
+      'csp_rules() { printf "%s\\n" "# a comment" "origin|connect-src|https://cdn.jsdelivr.net" "origin||https://cdn.jsdelivr.net"; }',
+      'csp_rule_list',
+    ].join('\n')
+    const out = execFileSync('bash', ['-c', script, 'rule-test', modulePath], {
+      encoding: 'utf-8',
+    })
+    const rules = out
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+    expect(rules).toEqual([
+      'origin|connect-src|https://cdn.jsdelivr.net',
+      '!!malformed rule: origin||https://cdn.jsdelivr.net',
+    ])
+  })
+})
+
+describe('a policy folded across lines is still matched', () => {
+  it('matches an origin whose source list continues on the next line', () => {
+    // A CSP header can be folded across lines, and browsers treat the fold
+    // as whitespace inside a source list.
+    const folded = "connect-src 'self'\n  https://cdn.jsdelivr.net;"
+    const missing = missingFor(folded)
+    expect(missing.join(' ')).not.toContain('connect-src')
   })
 })

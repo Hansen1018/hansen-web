@@ -7,7 +7,16 @@
 # Environment overrides:
 #   PUBLIC_URL — healthcheck URL (default https://hansendong.top)
 #   LOCAL_PORT — fallback local healthcheck port (default 8081)
-#   REMOTE_DIR — override destination path (default /var/www/hansen-web)
+#   REMOTE_DIR — override destination path (default /var/www/hansen-web).
+#                A local deploy accepts a relative path ("site", "./site",
+#                "out/../site"): the check is on the FOLDED path, so a
+#                path that folds to a directory inside the current one is
+#                accepted. It refuses "", ".", "..", a path that folds to
+#                the current directory or above ("a/..", "x/../../y"), an
+#                absolute path that contains a ".." component, and any
+#                path that starts with "-": those are refused before the
+#                build, not after it. Remote mode requires an absolute
+#                path and refuses ".." anywhere in it.
 #   LOCAL_OUT  — override build output dir (default out)
 
 set -euo pipefail
@@ -24,10 +33,60 @@ if [[ ! -f "$CSP_ASSERT_SH" ]]; then
 fi
 . "$CSP_ASSERT_SH"
 
+# The blog hand-over lives in deploy/blog-handover.sh for the same reason:
+# the local branch runs it directly and the remote branch ships that same
+# file to the host over stdin, so the two paths cannot drift apart.
+BLOG_HANDOVER_SH="$CSP_ASSERT_DIR/deploy/blog-handover.sh"
+if [[ ! -f "$BLOG_HANDOVER_SH" ]]; then
+  echo "✗ missing $BLOG_HANDOVER_SH (deploy.sh needs a full repo checkout)" >&2
+  exit 1
+fi
+. "$BLOG_HANDOVER_SH"
+
 REMOTE_DIR="${REMOTE_DIR:-/var/www/hansen-web}"
 LOCAL_OUT="${LOCAL_OUT:-out}"
 PUBLIC_URL="${PUBLIC_URL:-https://hansendong.top}"
 LOCAL_PORT="${LOCAL_PORT:-8081}"
+
+# remote_quote PATH
+#
+# Print PATH quoted for the remote shell, so a path that contains a space or a
+# quote survives the word splitting the remote shell performs on the command
+# string. REMOTE_DIR is overridable through the environment, so this is not
+# hypothetical: measured, an unquoted REMOTE_DIR containing a space made the
+# remote guard fail with "too many arguments", so the blog hand-over was
+# skipped without an error, and the same word splitting reached the
+# "rm -rf $REMOTE_DIR" line, which deletes the wrong paths.
+remote_quote() {
+  # A failure here would leave the operator with an empty quoted path and
+  # no clue why, so the failure is returned to the caller, which names the
+  # path in the message. The body keeps no brace block, so the function can
+  # still be lifted out of this file whole.
+  local quoted
+  quoted="$(printf '%s' "$1" | sed "s/'/'\\\\''/g")" || return 1
+  printf "'%s'" "$quoted"
+}
+
+# The path rules live in deploy/blog-handover.sh, which deploy.sh sources
+# above, so there is ONE implementation of what a safe path is: the module
+# checks the two roots it is given, and deploy.sh checks REMOTE_DIR with the
+# same functions. Two validators that disagree about what is safe are worse
+# than one.
+#
+# --- remote path validation (begin) ---
+validate_remote_dir() {
+  bh_path_is_safe "$1" 'REMOTE_DIR'
+}
+require_absolute_path() {
+  case "$1" in
+    /*) return 0 ;;
+    *)
+      echo "✗ ${2:-REMOTE_DIR} must be an absolute path in remote mode (got: $1)" >&2
+      return 1
+      ;;
+  esac
+}
+# --- remote path validation (end) ---
 
 # Deploy mode selection
 if [[ -n "${1:-}" ]]; then
@@ -38,6 +97,58 @@ else
   DEPLOY_MODE="local"
 fi
 
+# HOST is typed by the operator and reaches ssh and rsync as a remote
+# spec. Whitespace in it splits that spec, so it is refused here rather
+# than quoted into the wrong place.
+if [[ "$DEPLOY_MODE" == "remote" ]]; then
+  case "$HOST" in
+    -*)
+      # The host is the first positional to ssh and rsync, so a value that
+      # starts with "-" would be read as an OPTION ("-oProxyCommand=...").
+      echo "✗ the host must not start with '-' (got: $HOST)" >&2
+      exit 1
+      ;;
+    *[[:space:]]*)
+      echo "✗ the host must not contain whitespace (got: $HOST)" >&2
+      exit 1
+      ;;
+  esac
+fi
+
+# Checked before the build, so a bad path fails in a second rather than
+# after a full build, and long before anything is deleted. The trimmed path
+# is used from here on, so the staging directory is derived from the same
+# string the swap deletes: "/var/www/site/" would otherwise derive
+# "/var/www/site/.tmp", a directory INSIDE the live web root.
+#
+# The absolute-path requirement applies to the remote branch only. There the
+# path crosses to another host, so a relative one would name something else
+# entirely, and ".." would be resolved against that host's tree. A local
+# deploy never leaves this host, so "./site", "out/../site" and "site/"
+# all keep working.
+if [[ "$DEPLOY_MODE" == "remote" ]]; then
+  # The ".." check runs on the value AS IT WAS GIVEN: folding it away
+  # first would hide the very component the check is about.
+  require_no_parent_refs "$REMOTE_DIR" 'REMOTE_DIR' || exit 1
+fi
+if [[ "$DEPLOY_MODE" != "remote" ]]; then
+  # The fold resolves ".." lexically, while the kernel resolves it
+  # physically, after following symlinks, so a path like
+  # "link/../x" can name two different directories. When they
+  # disagree, the deploy would work on a tree the operator did not
+  # name, so the path is refused. A path that does not exist yet
+  # cannot disagree, so a first deploy to a new directory still
+  # works. This is the LOCAL branch only: in remote mode the path
+  # is resolved on the other host, and require_no_parent_refs
+  # already refuses a ".." component there.
+  bh_fold_agrees_with_kernel "$REMOTE_DIR" REMOTE_DIR || exit 1
+fi
+REMOTE_DIR="$(bh_fold_path "$REMOTE_DIR")"
+validate_remote_dir "$REMOTE_DIR" || exit 1
+if [[ "$DEPLOY_MODE" == "remote" ]]; then
+  require_absolute_path "$REMOTE_DIR" 'REMOTE_DIR' || exit 1
+fi
+
 # 1. Local build
 echo "→ Building..."
 npm run build
@@ -45,13 +156,97 @@ npm run build
 # 2. Atomic deploy (prevents serving half-written files)
 if [[ "$DEPLOY_MODE" == "remote" ]]; then
   echo "→ Uploading to $HOST (atomic via tmp dir)..."
-  ssh "$HOST" "mkdir -p $REMOTE_DIR.tmp"
+  # REMOTE_DIR was normalized and validated above: in remote mode it is
+  # absolute, it is not the root, it carries no "." or ".." component, and
+  # its trailing slashes are gone, so the staging path derived from it is
+  # the sibling REMOTE_DIR.tmp and not REMOTE_DIR/.tmp.
+  #
+  # What is left can still contain a space or a quote, so every path that
+  # reaches the remote shell is quoted with remote_quote, whose comment
+  # carries the measurement behind that quoting. rsync builds its own remote
+  # command line and escapes the path itself, so it needs nothing extra:
+  # measured with rsync 3.2.7, a remote path with a space or a shell
+  # metacharacter arrives at the remote shell as ONE backslash-escaped
+  # word ("/var/www/my\ site/blog/"), so it cannot split into another
+  # argument or become a command.
+  REMOTE_DIR_Q="$(remote_quote "$REMOTE_DIR")" || {
+    echo "✗ could not quote the path for the remote shell (got: $REMOTE_DIR)" >&2
+    exit 1
+  }
+  REMOTE_DIR_TMP_Q="$(remote_quote "$REMOTE_DIR.tmp")" || {
+    echo "✗ could not quote the path for the remote shell (got: $REMOTE_DIR.tmp)" >&2
+    exit 1
+  }
+  ssh "$HOST" "mkdir -p ${REMOTE_DIR_TMP_Q}"
   rsync -a --delete "$LOCAL_OUT/" "$HOST:$REMOTE_DIR.tmp/"
   # The Hugo blog repo deploys blog/feed.json into this same web root
   # (its deploy.sh sets WEB_DIR=/var/www/hansen-web). Carry it into the
   # staging dir so the atomic swap below does not drop it.
-  ssh "$HOST" "if [ -d $REMOTE_DIR/blog ]; then cp -a $REMOTE_DIR/blog $REMOTE_DIR.tmp/; fi"
-  ssh "$HOST" "rm -rf $REMOTE_DIR && mv $REMOTE_DIR.tmp $REMOTE_DIR"
+  #
+  # The hand-over runs on the host, from the same file the local branch
+  # sources, so the two paths cannot drift apart.
+  #
+  # It is fed to the host over stdin, and stdin can arrive empty or
+  # truncated: the remote shell would run an empty script, exit 0 and
+  # print nothing, and the swap below would drop blog/ with a green
+  # deploy. So the remote side prints a confirmation and it is checked.
+  handover_module="$(cat "$BLOG_HANDOVER_SH")" || {
+    echo "✗ could not read $BLOG_HANDOVER_SH" >&2
+    exit 1
+  }
+  handover_script="$(printf '%s\n%s\n' "$handover_module" 'stage_blog_into_staging "$1" "$2" || exit 1')"
+  # stdout alone is captured, because the confirmation is the only thing
+  # written there. The remote's diagnostics go to stderr, which reaches
+  # this terminal directly, so a refusal is shown to the operator as it
+  # happens instead of being swallowed into a variable.
+  # The exit status is captured, not acted on: the confirmation below is
+  # what decides. A pipeline can be non-zero because the local writer
+  # got SIGPIPE while the remote had already succeeded, and that must
+  # not abort a hand-over that worked.
+  # The expected confirmations are built BEFORE the hand-over runs, so
+  # they are computed from the same local state the hand-over is about
+  # to be compared against, and a failure to build them is a local
+  # error rather than something that looks like a refusal from the
+  # host.
+  # The expected confirmations come from the module's own functions, so the
+  # wording lives in one place and the comparison is EXACT. A prefix match
+  # would accept a stdout that merely starts with the marker.
+  # The guarantee is therefore: stdout must match exactly, otherwise the
+  # swap is refused. An empty, truncated or otherwise unexpected stdout
+  # matches neither marker and refuses the deploy.
+  # The remote side trims BOTH roots it is given before it builds any
+  # marker, and every marker it builds comes from the trimmed live
+  # root, so the expected marker is built from the trimmed path as
+  # well. Both sides then compute the same string, and the exact
+  # comparison does not depend on the two spellings happening to be
+  # equal.
+  expected_ok="$(bh_marker_ok "$REMOTE_DIR")"
+  # The "no blog/" marker carries the path the remote inspected, so the
+  # operator can see WHICH web root was looked at, and a remote that
+  # inspected a different root does not match this marker.
+  expected_noblog="$(bh_marker_noblog "$REMOTE_DIR")"
+  # The "no web root" marker is a different fact from the "no blog/" marker:
+  # the live web root is not there at all (a first deploy to a host that
+  # has nothing yet), versus a web root that IS there without the blog.
+  # Saying which one it is means a mistyped REMOTE_DIR is visible instead
+  # of silent.
+  expected_noroot="$(bh_marker_noroot "$REMOTE_DIR")"
+  handover_status=0
+  handover_out="$(printf '%s\n' "$handover_script" | ssh "$HOST" "sh -s -- ${REMOTE_DIR_Q} ${REMOTE_DIR_TMP_Q}")" || handover_status=$?
+  # The comparison is a plain string equality, so it cannot be a pattern
+  # match: a path may contain "*", "[" or "?", and a pattern would let a
+  # stdout that is NOT the expected marker match anyway.
+  if [ "$handover_out" = "$expected_ok" ]; then
+    :
+  elif [ "$handover_out" = "$expected_noblog" ]; then
+    echo "  ⚠ the live web root $REMOTE_DIR has no blog/ to carry over" >&2
+  elif [ "$handover_out" = "$expected_noroot" ]; then
+    echo "  ⚠ the live web root $REMOTE_DIR does not exist on $HOST; nothing to carry over" >&2
+  else
+    echo "✗ the blog hand-over did not report success on $HOST (ssh exit $handover_status); refusing to swap" >&2
+    exit 1
+  fi
+  ssh "$HOST" "rm -rf ${REMOTE_DIR_Q} && mv ${REMOTE_DIR_TMP_Q} ${REMOTE_DIR_Q}"
 else
   echo "→ Deploying locally to $REMOTE_DIR (atomic via tmp dir)..."
   mkdir -p "$REMOTE_DIR.tmp"
@@ -59,8 +254,16 @@ else
   # The Hugo blog repo deploys blog/feed.json into this same web root
   # (its deploy.sh sets WEB_DIR=/var/www/hansen-web). Carry it into the
   # staging dir so the atomic swap below does not drop it.
-  if [ -d "$REMOTE_DIR/blog" ]; then
-    cp -a "$REMOTE_DIR/blog" "$REMOTE_DIR.tmp/"
+  # The hand-over refuses rather than swapping: if it fails, the live
+  # blog/ would be dropped by the swap below, so the swap does not run.
+  # The check is explicit rather than left to "set -e", so it keeps
+  # protecting the swap if this line is ever moved into an if/|| block.
+  # The staging tree is left in place when the hand-over refuses: the
+  # module removed the partial blog/ copy it made, and the next run
+  # refreshes the whole staging tree with "rsync --delete".
+  if ! stage_blog_into_staging "$REMOTE_DIR" "$REMOTE_DIR.tmp"; then
+    echo "✗ the blog hand-over failed; refusing to swap" >&2
+    exit 1
   fi
   rm -rf "$REMOTE_DIR"
   mv "$REMOTE_DIR.tmp" "$REMOTE_DIR"
@@ -84,10 +287,11 @@ fi
 #
 # We verify BOTH presence AND expected value to prevent a misconfigured host
 # from returning success while serving a permissive policy (e.g. an
-# X-Frame-Options: ALLOWALL regression). CSP is checked for two critical
-# directives (frame-ancestors 'none' + default-src 'self') rather than an
-# exact string match, since the policy string is long and directive order
-# may vary across hosts.
+# X-Frame-Options: ALLOWALL regression). CSP is not compared as one exact
+# string -- the policy string is long and directive order may vary across
+# hosts -- but against the individual critical rules in
+# deploy/csp-assert.sh: frame-ancestors 'none', default-src 'self', and the
+# CDN origins the deployed trees actually load.
 echo "→ Verifying security headers on $PUBLIC_URL..."
 # curl -fsSLI follows redirects, so the response can contain multiple
 # HTTP/ blocks (one per redirect hop). The awk script tracks the LAST
@@ -159,33 +363,60 @@ else
       missing_headers+=("$header")
     elif [[ "$(printf %s "$header" | tr "[:upper:]" "[:lower:]")" == "content-security-policy" ]]; then
       weak=0
-      # Both critical directives must appear as standalone directives
-      # (not as prefixed junk like "not-frame-ancestors ..." which browsers
-      # ignore) and must END at their canonical value:
-      #   - frame-ancestors 'none'  → followed by ; or end-of-string
-      #     (rejects `frame-ancestors 'none' https://evil.example`)
-      #   - default-src 'self'     → followed by ; or end-of-string
-      #     (rejects `default-src 'self' https://evil.example`)
-      # The boundary-anchored ERE catches both prefixed-junk and
-      # extra-source regressions. Loop unrolled into explicit checks so
-      # the diagnostic message names WHICH directive(s) actually failed
-      # (the previous for-loop broke on first failure but the message
-      # listed both, making policy troubleshooting harder).
+      # Every critical rule is anchored on a CSP token boundary, so a
+      # directive must appear as a standalone directive (not as prefixed
+      # junk like "not-frame-ancestors ...", which browsers ignore), a
+      # canonical value must END at its boundary, and a whitelisted origin
+      # must match as a whole host rather than a lookalike prefix. The
+      # rules themselves live in deploy/csp-assert.sh; the diagnostic
+      # message names WHICH rule(s) actually failed, so policy
+      # troubleshooting does not have to re-run the check by hand.
       # --- CSP critical-directive verification (begin) ---
       # The rules live in deploy/csp-assert.sh, shared with
       # tests/deploy/csp-assert.test.ts, so the verifier and its test
       # exercise one implementation. They are anchored to what the deployed
       # trees actually load, measured on both sites; see that file for the
       # evidence behind each rule.
-      missing_directives="$(csp_missing_directives "$actual_value" || true)"
-      missing_directives="${missing_directives//$'\n'/ }"
-      if [[ -n "$missing_directives" ]]; then
+      # The module reports two different things on stdout: a problem with
+      # the rule list (a "!!" marker) and a gap in the served policy. They
+      # are not the same fault: a rule list this repository cannot parse
+      # is a fault HERE, while a directive the served policy does not
+      # carry is a fault in the deployment. They are kept apart here so
+      # the report says which one it is.
+      # The status is kept, so a module that FAILED without a word is
+      # not read as "nothing to report".
+      csp_status=0
+      csp_findings="$(csp_missing_directives "$actual_value")" || csp_status=$?
+      missing_directives=""
+      rule_list_problems=""
+      while IFS= read -r csp_line; do
+        [ -n "$csp_line" ] || continue
+        case "$csp_line" in
+          '!!'*)
+            rule_list_problems="${rule_list_problems:+$rule_list_problems }${csp_line#!!}"
+            ;;
+          *)
+            missing_directives="${missing_directives:+$missing_directives }$csp_line"
+            ;;
+        esac
+      done <<< "$csp_findings"
+      # A module that failed without saying anything is not "nothing to
+      # report": it is a fault in the rule list, and the deploy refuses.
+      if [ -z "$csp_findings" ] && [ "$csp_status" -ne 0 ]; then
+        rule_list_problems="the CSP rules could not be evaluated"
+      fi
+      if [[ -n "$missing_directives" || -n "$rule_list_problems" ]]; then
         weak=1
       fi
       # --- CSP critical-directive verification (end) ---
 
       if [[ $weak -eq 1 ]]; then
-        mismatched_headers+=("$header (missing critical directive: $missing_directives)")
+        if [[ -n "$rule_list_problems" ]]; then
+          mismatched_headers+=("$header (the CSP rule list could not be used: $rule_list_problems)")
+        fi
+        if [[ -n "$missing_directives" ]]; then
+          mismatched_headers+=("$header (missing critical directive: $missing_directives)")
+        fi
       fi
     else
       # Case-insensitive compare per RFC 7230 §3.2.4 via POSIX tr (Bash 3.x
@@ -204,9 +435,11 @@ else
     echo "    These must be configured at the static host (nginx/Caddy)."
     echo "    See deploy/nginx-security-headers.conf for the recommended snippet."
   else
-    # Success line intentionally reflects partial CSP coverage (only the two
-    # critical directives are checked), to avoid overstating verification.
-    echo "  ✓ all ${#EXPECTED[@]} security headers present (CSP verified for critical directives)"
+    # The success line reports how many critical rules were checked, and
+    # the count comes from the rule module, so the text the operator reads
+    # and the rules that actually run cannot drift apart. It is not a
+    # claim about the whole policy.
+    echo "  ✓ all ${#EXPECTED[@]} security headers present (CSP verified for $(csp_rule_count) critical rules)"
   fi
 fi
 
