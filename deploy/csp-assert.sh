@@ -52,17 +52,6 @@
 # verifier: they are the two directives whose absence actually weakens the
 # policy.
 
-# csp_escape_ere TEXT
-#
-# Escape TEXT so that the ERE in csp_has_origin matches it literally.
-#
-# Both halves of the pattern are escaped, and escaping only '.' was not
-# enough:
-#   - an unescaped '+' in an origin made 'a+b' match 'aab', so a policy
-#     naming a different host satisfied a rule it did not satisfy;
-#   - an unescaped '.' in a directive made 'connect.src' match
-#     'connect-src', so a rule for one directive was satisfied by another.
-#
 # csp_rule_field_is_valid <field>
 #
 # A rule field is ONE token: not empty, and carrying no whitespace. A
@@ -77,6 +66,17 @@ csp_rule_field_is_valid() {
   return 0
 }
 
+# csp_escape_ere TEXT
+#
+# Escape TEXT so that the ERE in csp_has_origin matches it literally.
+#
+# Both halves of the pattern are escaped, and escaping only '.' was not
+# enough:
+#   - an unescaped '+' in an origin made 'a+b' match 'aab', so a policy
+#     naming a different host satisfied a rule it did not satisfy;
+#   - an unescaped '.' in a directive made 'connect.src' match
+#     'connect-src', so a rule for one directive was satisfied by another.
+#
 # The character class is the set of ERE metacharacters: . [ ] \ ^ $ * + ?
 # ( ) { } |. Everything else is literal and is left alone.
 # The bracket expression puts the closing bracket first, where a bracket
@@ -204,10 +204,14 @@ csp_has_origin_folded() {
 # rule asks whether the directive whitelists one origin, so the other
 # sources beside it are allowed.
 #
-# This list is the single source of truth. csp_missing_directives enforces
-# it and csp_rule_count counts it, so the number the operator reads and the
-# rules that actually run cannot drift apart: there is no second list to
-# forget to update.
+# This list is the single source of truth. It is parsed in ONE place,
+# csp_rule_list, which holds a rule to a known kind and to one token per
+# field before the rule is handed on: a rule that cannot be compared with
+# a policy is dropped with a "!!" label instead of being counted as a
+# rule that ran. csp_missing_directives enforces the parsed list and
+# csp_rule_count counts it, so the number the operator reads and the rules
+# that actually run cannot drift apart: there is no second list to forget
+# to update.
 csp_rules() {
   cat <<'RULES'
 canonical|frame-ancestors|'none'
@@ -356,8 +360,12 @@ csp_missing_directives() {
       status=1
       continue
     fi
-    # The count is incremented only for a rule that is enforced below,
-    # so it counts the same rules csp_rule_count counts.
+    # The count is the number of rules in the PARSED list, which is what
+    # csp_rule_count reports: both read the same list, so the number the
+    # operator reads and the number of rules this loop walked cannot drift
+    # apart. A rule the loop refuses to evaluate (a failed escape) is
+    # still a rule of the list, so it stays in the count and is reported
+    # with a "!!" label of its own.
     rule_count=$((rule_count + 1))
     case "$kind" in
       canonical)
