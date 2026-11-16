@@ -19,6 +19,29 @@
 #                path and refuses ".." anywhere in it.
 #   LOCAL_OUT  — override build output dir (default out)
 
+# deploy.sh is a PROGRAM, not a library: sourcing it RUNS the deploy,
+# including the "rm -rf $REMOTE_DIR" and the swap that replaces the
+# live web root. Measured 2026-11-16: a measurement script ran
+# "source deploy.sh >/dev/null 2>&1 || true" to reach one helper. The
+# build failed (the cwd was not the repo), the "|| true" also turned
+# off "set -e" for everything inside the sourced file, and the script
+# went on to delete the live web root and replace it with an empty
+# staging tree. The site served a directory listing until the next
+# deploy.
+#
+# So this file refuses to be sourced. The helpers live in
+# deploy/blog-handover.sh and deploy/csp-assert.sh, which are meant to
+# be sourced and hold nothing but functions.
+#
+# The check is BEFORE "set -euo pipefail", so a refused source does not
+# change the options of the shell that tried it either.
+if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
+  echo "✗ deploy.sh must be run, not sourced: sourcing it runs the deploy," >&2
+  echo "  including the swap that replaces the live web root." >&2
+  echo "  To reuse a helper, source deploy/blog-handover.sh or deploy/csp-assert.sh." >&2
+  return 1 2>/dev/null || exit 1
+fi
+
 set -euo pipefail
 
 # The CSP critical-directive rules live in deploy/csp-assert.sh so that this
@@ -151,7 +174,14 @@ fi
 
 # 1. Local build
 echo "→ Building..."
-npm run build
+# The build status is checked EXPLICITLY and not left to "set -e". A
+# deploy can be run where errexit is off - a sourced copy inside an
+# AND-OR list is one such place - and a build that failed without
+# anybody noticing leads to publishing a tree that holds no site.
+if ! npm run build; then
+  echo "✗ the build failed; refusing to deploy" >&2
+  exit 1
+fi
 
 # 2. Atomic deploy (prevents serving half-written files)
 if [[ "$DEPLOY_MODE" == "remote" ]]; then
@@ -178,7 +208,10 @@ if [[ "$DEPLOY_MODE" == "remote" ]]; then
     exit 1
   }
   ssh "$HOST" "mkdir -p ${REMOTE_DIR_TMP_Q}"
-  rsync -a --delete "$LOCAL_OUT/" "$HOST:$REMOTE_DIR.tmp/"
+  if ! rsync -a --delete "$LOCAL_OUT/" "$HOST:$REMOTE_DIR.tmp/"; then
+    echo "✗ could not copy the build to $HOST; refusing to swap" >&2
+    exit 1
+  fi
   # The Hugo blog repo deploys blog/feed.json into this same web root
   # (its deploy.sh sets WEB_DIR=/var/www/hansen-web). Carry it into the
   # staging dir so the atomic swap below does not drop it.
@@ -194,7 +227,13 @@ if [[ "$DEPLOY_MODE" == "remote" ]]; then
     echo "✗ could not read $BLOG_HANDOVER_SH" >&2
     exit 1
   }
-  handover_script="$(printf '%s\n%s\n' "$handover_module" 'stage_blog_into_staging "$1" "$2" || exit 1')"
+  # The staging tree has to BE the site before it is published, and the
+  # swap on the host deletes the live web root. The check runs on the
+  # host, on the tree that is about to be published, and it refuses
+  # BEFORE the hand-over touches it. Its message goes to stderr, so the
+  # stdout of this script stays the one confirmation line the caller
+  # compares against.
+  handover_script="$(printf '%s\n%s\n%s\n' "$handover_module" 'bh_tree_holds_the_site "$2" "the staging tree" || exit 1' 'stage_blog_into_staging "$1" "$2" || exit 1')"
   # stdout alone is captured, because the confirmation is the only thing
   # written there. The remote's diagnostics go to stderr, which reaches
   # this terminal directly, so a refusal is shown to the operator as it
@@ -250,7 +289,15 @@ if [[ "$DEPLOY_MODE" == "remote" ]]; then
 else
   echo "→ Deploying locally to $REMOTE_DIR (atomic via tmp dir)..."
   mkdir -p "$REMOTE_DIR.tmp"
-  rsync -a --delete "$LOCAL_OUT/" "$REMOTE_DIR.tmp/"
+  if ! rsync -a --delete "$LOCAL_OUT/" "$REMOTE_DIR.tmp/"; then
+    echo "✗ could not copy the build into $REMOTE_DIR.tmp; refusing to swap" >&2
+    exit 1
+  fi
+  # The swap below replaces the live web root with this tree, so the
+  # tree has to BE the site. A build or an rsync that failed leaves a
+  # tree with no index.html, and publishing that takes the site down
+  # and serves a directory listing instead.
+  bh_tree_holds_the_site "$REMOTE_DIR.tmp" "the staging tree" || exit 1
   # The Hugo blog repo deploys blog/feed.json into this same web root
   # (its deploy.sh sets WEB_DIR=/var/www/hansen-web). Carry it into the
   # staging dir so the atomic swap below does not drop it.

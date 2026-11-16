@@ -345,6 +345,41 @@ bh_canonical_path() (
   printf '%s\n' "$bh_cp_real"
 )
 
+# bh_tree_holds_the_site PATH LABEL
+#
+# Refuse a tree that does not hold the site.
+#
+# The swap deletes the live web root and moves the staging tree into its
+# place, so the staging tree has to BE the site before that happens. A
+# tree that holds nothing but the blog/ the hand-over just carried over
+# is not the site: publishing it leaves the visitor with a directory
+# listing and a 404 on every asset.
+#
+# The check is on index.html, the entry point of the static export, and
+# not on "the tree is not empty": a tree that holds only blog/feed.json
+# is not empty and is still not the site.
+#
+# The check is on the tree that is about to be published, not on the
+# build output, because the tree that is about to be published is the
+# one the visitor gets.
+bh_tree_holds_the_site() (
+  bh_ts_path=${1-}
+  bh_ts_label=${2:-the tree}
+  if [ -z "$bh_ts_path" ]; then
+    echo "error: $bh_ts_label must not be empty" >&2
+    exit 1
+  fi
+  if [ ! -d "$bh_ts_path" ]; then
+    echo "error: $bh_ts_label $bh_ts_path does not exist or is not a directory" >&2
+    exit 1
+  fi
+  if [ ! -f "$bh_ts_path/index.html" ]; then
+    echo "error: $bh_ts_label $bh_ts_path holds no index.html; refusing to publish it" >&2
+    exit 1
+  fi
+  exit 0
+)
+
 # stage_blog_into_staging LIVE_ROOT STAGING_ROOT
 #
 # Carry LIVE_ROOT/blog/ into STAGING_ROOT/blog/.

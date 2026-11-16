@@ -608,3 +608,105 @@ describe('the module refuses the paths that would delete the wrong tree', () => 
     expect(res.stderr).toContain('newline')
   })
 })
+
+describe('the tree that is published has to BE the site', () => {
+  // Run the gate the way deploy.sh runs it: the module is sourced and
+  // the function is called with the tree and a label.
+  function gate(path: string): Result {
+    const res = spawnSync(
+      'sh',
+      ['-c', '. "$1"; bh_tree_holds_the_site "$2" "the staging tree"', 'gate-test', modulePath, path],
+      { encoding: 'utf8' },
+    )
+    return { status: res.status ?? 1, stdout: res.stdout ?? '', stderr: res.stderr ?? '' }
+  }
+
+  it('refuses a tree that holds no index.html', () => {
+    // The swap deletes the live web root, so the tree it publishes has
+    // to be the site. Measured 2026-11-16: a deploy that lost its
+    // build published a tree holding nothing but the carried-over
+    // blog/, and the site answered with a directory listing.
+    const dir = scratch()
+    const staging = join(dir, 'staging')
+    writeFile(join(staging, 'blog', 'feed.json'), 'live')
+
+    const res = gate(staging)
+    expect(res.status).not.toBe(0)
+    expect(res.stderr).toContain('index.html')
+  })
+
+  it('accepts a tree that holds the entry point', () => {
+    const dir = scratch()
+    const staging = join(dir, 'staging')
+    writeFile(join(staging, 'index.html'), '<h1>site</h1>')
+
+    expect(gate(staging).status).toBe(0)
+  })
+
+  it('refuses a tree that does not exist', () => {
+    const res = gate(join(scratch(), 'nowhere'))
+    expect(res.status).not.toBe(0)
+    expect(res.stderr).toContain('does not exist')
+  })
+
+  it('refuses an empty path', () => {
+    const res = gate('')
+    expect(res.status).not.toBe(0)
+    expect(res.stderr).toContain('must not be empty')
+  })
+})
+
+describe('deploy.sh is a program, not a library', () => {
+  it('refuses to be sourced, and the web root is left alone', () => {
+    // Sourcing deploy.sh RUNS the deploy: the build, the rsync and the
+    // swap that deletes the live web root. Measured 2026-11-16: a
+    // measurement script sourced it to reach one helper, the build
+    // failed in the wrong directory, and the script went on to replace
+    // the live site with an empty staging tree.
+    //
+    // The paths point into a scratch directory, so a regression that
+    // lets the deploy run cannot reach the real web root.
+    const dir = scratch()
+    const live = join(dir, 'live')
+    writeFile(join(live, 'index.html'), 'live')
+
+    const res = spawnSync('bash', ['-c', 'source "$1"', 'source-test', deployShPath], {
+      encoding: 'utf8',
+      env: { ...process.env, REMOTE_DIR: live, LOCAL_OUT: join(dir, 'out') },
+    })
+    expect(res.status).not.toBe(0)
+    expect(res.stderr).toContain('must be run, not sourced')
+    // The deploy did not run: the tree is untouched.
+    expect(readFileSync(join(live, 'index.html'), 'utf8')).toBe('live')
+  })
+
+  it('does not change the options of the shell that sourced it', () => {
+    // The refusal happens BEFORE "set -euo pipefail", so a refused
+    // source leaves the caller shell exactly as it was.
+    const res = spawnSync(
+      'bash',
+      ['-c', 'before=$-; source "$1"; echo "$before/$-"', 'source-test', deployShPath],
+      { encoding: 'utf8' },
+    )
+    expect(res.stdout.trim().split('/')[0]).toBe(res.stdout.trim().split('/')[1])
+  })
+
+  it('checks the staging tree before it deletes the live web root', () => {
+    // The gate and the destructive line live in the same branch, and
+    // the gate has to come first: a check that runs after the "rm -rf"
+    // protects nothing.
+    const src = readFileSync(deployShPath, 'utf8')
+    const gate = src.indexOf('bh_tree_holds_the_site "$REMOTE_DIR.tmp"')
+    const swap = src.indexOf('rm -rf "$REMOTE_DIR"')
+    expect(gate).toBeGreaterThan(-1)
+    expect(swap).toBeGreaterThan(-1)
+    expect(gate).toBeLessThan(swap)
+  })
+
+  it('checks the staging tree on the host too', () => {
+    // The remote branch swaps on the host, so the gate runs there as
+    // well: it is shipped with the module and runs before the hand-over.
+    const src = readFileSync(deployShPath, 'utf8')
+    expect(src).toContain('bh_tree_holds_the_site "$2" "the staging tree" || exit 1')
+  })
+})
